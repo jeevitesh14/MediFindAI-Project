@@ -1,0 +1,26 @@
+export const ROLES = {
+  USER: 'USER',
+  PHARMACY_OWNER: 'PHARMACY_OWNER',
+  ADMIN: 'ADMIN',
+};
+
+export const RESERVATION_STATUS = {
+  PENDING: 'PENDING',
+  CONFIRMED: 'CONFIRMED',
+  READY_FOR_PICKUP: 'READY_FOR_PICKUP',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+  EXPIRED: 'EXPIRED',
+};
+
+export const STOCK_STATUS = {
+  AVAILABLE: 'AVAILABLE',
+  LOW_STOCK: 'LOW_STOCK',
+  OUT_OF_STOCK: 'OUT_OF_STOCK',
+};
+
+export const STORAGE_KEYS = {
+  ACCESS_TOKEN: 'accessToken',
+  REFRESH_TOKEN: 'refreshToken',
+  USER: 'user',
+};

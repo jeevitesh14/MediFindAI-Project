@@ -1,0 +1,90 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply font-sans text-white bg-slate-950 antialiased selection:bg-cyan-500 selection:text-primary-950;
+  }
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-primary-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-cyan-500/25 transition-all duration-200 hover:from-cyan-600 hover:to-primary-700 hover:shadow-cyan-500/35 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 focus:ring-offset-slate-950 active:translate-y-0 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-sm backdrop-blur-md transition-all duration-200 hover:bg-white/20 hover:border-white/30 hover:text-white hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 focus:ring-offset-slate-950 active:translate-y-0 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+}
+
+.btn-outline {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-950/40 px-5 py-2.5 text-sm font-semibold text-cyan-300 backdrop-blur-md shadow-sm transition-all duration-200 hover:bg-cyan-900/60 hover:border-cyan-400 hover:text-cyan-200 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 active:translate-y-0 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+}
+
+.input-field {
+  @apply w-full rounded-xl border border-white/20 bg-slate-900/80 px-4 py-2.5 text-sm text-white placeholder:text-primary-200/50 shadow-inner backdrop-blur-md transition-all duration-150 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/30;
+}
+
+.card {
+  @apply rounded-3xl border border-white/15 bg-white/10 p-6 sm:p-7 shadow-2xl backdrop-blur-xl transition-all duration-300;
+}
+
+.card-interactive {
+  @apply rounded-3xl border border-white/15 bg-white/10 p-6 sm:p-7 shadow-2xl backdrop-blur-xl transition-all duration-300 hover:border-cyan-400/50 hover:bg-white/15 hover:shadow-glow hover:-translate-y-1;
+}
+
+.glass-card {
+  @apply rounded-3xl border border-white/15 bg-white/10 backdrop-blur-xl shadow-2xl;
+}
+
+.glass-panel {
+  @apply rounded-3xl border border-white/10 bg-slate-900/60 backdrop-blur-2xl shadow-2xl;
+}
+
+.badge-available {
+  @apply inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-1 text-xs font-semibold text-emerald-300 border border-emerald-500/40;
+}
+
+.badge-low {
+  @apply inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-1 text-xs font-semibold text-amber-300 border border-amber-500/40;
+}
+
+.badge-out {
+  @apply inline-flex items-center gap-1 rounded-full bg-rose-500/20 px-2.5 py-1 text-xs font-semibold text-rose-300 border border-rose-500/40;
+}
+
+.badge-prescription {
+  @apply inline-flex items-center gap-1 rounded-full bg-purple-500/20 px-2.5 py-1 text-xs font-semibold text-purple-300 border border-purple-500/40;
+}
+
+.badge-otc {
+  @apply inline-flex items-center gap-1 rounded-full bg-cyan-500/20 px-2.5 py-1 text-xs font-semibold text-cyan-300 border border-cyan-500/40;
+}
+
+.badge-hero {
+  @apply inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-950/60 px-4 py-1.5 text-xs font-semibold text-cyan-300 backdrop-blur-md shadow-lg shadow-cyan-900/30;
+}
+
+/* Custom modern scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(56, 166, 246, 0.3);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 166, 246, 0.6);
+}

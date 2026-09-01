@@ -1,0 +1,38 @@
+# --- Environment / secrets ---
+.env
+*.env
+!.env.example
+
+# --- Backend (Java/Maven) ---
+backend/target/
+backend/.mvn/
+backend/*.iml
+backend/.idea/
+*.class
+*.jar
+!*.jar.example
+
+# --- Frontend (Node) ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.log
+npm-debug.log*
+
+# --- IDE ---
+.vscode/
+.idea/
+*.iml
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Uploads ---
+uploads/
+backend/uploads/
+
