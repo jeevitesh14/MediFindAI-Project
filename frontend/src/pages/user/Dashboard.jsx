@@ -15,6 +15,7 @@ import {
   FiClock,
   FiUploadCloud,
   FiFileText,
+  FiPackage,
 } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import useAuth from '../../hooks/useAuth';
