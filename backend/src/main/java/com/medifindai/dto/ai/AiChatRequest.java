@@ -16,10 +16,14 @@ import java.util.List;
 public class AiChatRequest {
 
     @NotBlank(message = "Message cannot be empty")
-    @Size(max = 1000, message = "Message exceeds maximum length")
+    @Size(max = 2000, message = "Message exceeds maximum length")
     private String message;
 
     private List<ChatMessageDto> history;
+
+    private String sessionId;
+
+    private String prescriptionContext;
 
     @Data
     @Builder

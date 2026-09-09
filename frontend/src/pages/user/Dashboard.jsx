@@ -54,6 +54,14 @@ export default function UserDashboard() {
       to: '/dashboard/reservations',
     },
     {
+      label: 'My Orders',
+      value: '0',
+      desc: 'Track delivery & pickup',
+      icon: FiPackage,
+      gradient: 'from-emerald-500 to-teal-600',
+      to: '/orders',
+    },
+    {
       label: 'Saved Pharmacies',
       value: '0',
       desc: 'Verified local stores',
@@ -144,7 +152,7 @@ export default function UserDashboard() {
       </section>
 
       {/* Real-Time Telemetry Stats Cards */}
-      <section className="grid gap-5 sm:grid-cols-3">
+      <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
           <Link
             key={s.label}

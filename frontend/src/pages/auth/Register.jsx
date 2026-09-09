@@ -4,7 +4,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiArrowRight, FiUser, FiShoppingBag } from 'react-icons/fi';
+import { FiArrowRight, FiUser, FiShoppingBag, FiMail, FiPhone, FiLock } from 'react-icons/fi';
 
 import { registerUser, clearAuthError } from '../../store/slices/authSlice';
 import { registerSchema } from '../../utils/validationSchemas';
@@ -37,7 +37,6 @@ export default function Register() {
     }
   }, [error, dispatch]);
 
-
   const onSubmit = (data) => {
     const { confirmPassword: _, ...payload } = data;
     dispatch(
@@ -50,7 +49,6 @@ export default function Register() {
       })
     );
   };
-
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-primary-950 via-primary-900 to-slate-900 px-4 py-12 text-white relative overflow-hidden">
@@ -98,13 +96,36 @@ export default function Register() {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3.5">
-          <InputField label="Full Name" name="fullName" placeholder="Dr. John Doe" register={register} error={errors.fullName} />
-          <InputField label="Email Address" name="email" type="email" placeholder="you@example.com" register={register} error={errors.email} />
-          <InputField label="Phone Number (Optional)" name="phone" placeholder="9876543210" register={register} error={errors.phone} />
+          <InputField
+            label="Full Name"
+            name="fullName"
+            icon={FiUser}
+            placeholder="Dr. John Doe"
+            register={register}
+            error={errors.fullName}
+          />
+          <InputField
+            label="Email Address"
+            name="email"
+            type="email"
+            icon={FiMail}
+            placeholder="you@example.com"
+            register={register}
+            error={errors.email}
+          />
+          <InputField
+            label="Phone Number (Optional)"
+            name="phone"
+            icon={FiPhone}
+            placeholder="9876543210"
+            register={register}
+            error={errors.phone}
+          />
           <InputField
             label="Password"
             name="password"
             type="password"
+            icon={FiLock}
             placeholder="••••••••"
             register={register}
             error={errors.password}
@@ -113,6 +134,7 @@ export default function Register() {
             label="Confirm Password"
             name="confirmPassword"
             type="password"
+            icon={FiLock}
             placeholder="••••••••"
             register={register}
             error={errors.confirmPassword}

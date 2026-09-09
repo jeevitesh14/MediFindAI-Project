@@ -203,16 +203,22 @@ export default function Landing() {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.4 }}
-            className="mt-10 flex flex-wrap items-center justify-center gap-4"
+            className="mt-10 flex flex-wrap items-center justify-center gap-3.5"
           >
-            <Link to="/register" className="btn-primary py-3 px-8 text-base shadow-xl shadow-primary-600/30">
-              Get Started Free <FiArrowRight size={18} />
+            <Link to="/medicines" className="btn-primary py-3 px-7 text-sm sm:text-base font-bold shadow-xl shadow-cyan-500/25">
+              <FiSearch size={17} /> Find Your Medicine
             </Link>
             <Link
-              to="/dashboard/search"
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/10 px-7 py-3 text-base font-semibold text-white backdrop-blur-md transition-all hover:bg-white/20"
+              to="/pharmacies"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-3 text-sm sm:text-base font-semibold text-white backdrop-blur-md transition-all hover:bg-white/20"
             >
-              Explore Live Search
+              <FiMapPin size={17} className="text-cyan-400" /> Locate Pharmacies
+            </Link>
+            <Link
+              to="/register"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-950/50 px-5 py-3 text-sm sm:text-base font-semibold text-cyan-300 backdrop-blur-md transition-all hover:bg-cyan-900/60"
+            >
+              Get Started Free <FiArrowRight size={17} />
             </Link>
           </motion.div>
 

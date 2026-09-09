@@ -18,6 +18,9 @@ import {
   FiArrowRight,
   FiUploadCloud,
   FiShoppingCart,
+  FiBookOpen,
+  FiChevronDown,
+  FiChevronUp,
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/axiosConfig';
@@ -26,7 +29,6 @@ import reservationService from '../../services/reservationService';
 import { addToCart } from '../../store/slices/cartSlice';
 import VoiceSearchButton from '../../components/forms/VoiceSearchButton';
 import PrescriptionUploadModal from '../../components/forms/PrescriptionUploadModal';
-
 
 const POPULAR_SEARCHES = [
   'Paracetamol 500mg',
@@ -45,11 +47,11 @@ export default function MedicineSearch() {
   const dispatch = useDispatch();
   const { isAuthenticated } = useAuth();
 
-
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [expandedDetails, setExpandedDetails] = useState({});
 
   // Autocomplete state
   const [suggestions, setSuggestions] = useState([]);
@@ -66,6 +68,13 @@ export default function MedicineSearch() {
   const [selectedPharmacy, setSelectedPharmacy] = useState(null);
   const [reserveQuantity, setReserveQuantity] = useState(1);
   const [isReserving, setIsReserving] = useState(false);
+
+  const toggleDetails = (medicineId) => {
+    setExpandedDetails((prev) => ({
+      ...prev,
+      [medicineId]: !prev[medicineId],
+    }));
+  };
 
 
   const containerRef = useRef(null);
@@ -160,7 +169,10 @@ export default function MedicineSearch() {
     if (initialQuery) {
       performSearch(initialQuery);
     }
-  }, [initialQuery, performSearch]);
+    if (searchParams.get('upload') === 'true' || searchParams.get('upload') === 'prescription') {
+      setPrescriptionModalOpen(true);
+    }
+  }, [initialQuery, searchParams, performSearch]);
 
   // Handle autocomplete debounced fetch
   useEffect(() => {
@@ -537,6 +549,31 @@ export default function MedicineSearch() {
         ))}
       </div>
 
+      {/* Loading Skeleton */}
+      {loading && (
+        <div className="space-y-4 animate-fade-in">
+          {[1, 2].map((i) => (
+            <div key={i} className="rounded-4xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 backdrop-blur-xl shadow-2xl space-y-6">
+              <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-5">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-2xl skeleton" />
+                  <div className="space-y-2">
+                    <div className="h-6 w-48 rounded-lg skeleton" />
+                    <div className="h-4 w-64 rounded-lg skeleton" />
+                  </div>
+                </div>
+                <div className="h-10 w-28 rounded-xl skeleton" />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                {[1, 2, 3].map((j) => (
+                  <div key={j} className="h-36 rounded-2xl skeleton" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Message Info Box */}
       {message && !loading && (
         <div className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-xl text-center text-sm text-primary-100 shadow-xl flex items-center justify-center gap-2.5">
@@ -546,7 +583,7 @@ export default function MedicineSearch() {
       )}
 
       {/* Search Results Display */}
-      {results.length > 0 && (
+      {!loading && results.length > 0 && (
         <div className="space-y-6">
           <div className="flex items-center justify-between border-b border-white/10 pb-3">
             <h2 className="text-xl font-bold text-white">
@@ -561,6 +598,7 @@ export default function MedicineSearch() {
               const lowestPrice = activePharmacies.length > 0
                 ? Math.min(...activePharmacies.map((p) => Number(p.price)))
                 : null;
+              const isDetailsExpanded = expandedDetails[medicine.id];
 
               return (
                 <div key={medicine.id} className="rounded-4xl border border-white/15 bg-white/10 p-6 sm:p-8 backdrop-blur-xl shadow-2xl space-y-6">
@@ -587,10 +625,20 @@ export default function MedicineSearch() {
                           {medicine.dosageForm && <span>· {medicine.dosageForm}</span>}
                         </p>
 
-                        <p className="mt-1 text-xs text-primary-200/60">
-                          Manufacturer: <span className="font-medium text-primary-100">{medicine.manufacturer || 'Certified Pharma'}</span>
-                          {medicine.category && <span> · Category: <span className="font-medium text-primary-100">{medicine.category}</span></span>}
-                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-primary-200/70">
+                          <span>Manufacturer: <strong className="text-primary-100">{medicine.manufacturer || 'Certified Pharma'}</strong></span>
+                          {medicine.category && <span>· Category: <strong className="text-primary-100">{medicine.category}</strong></span>}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleDetails(medicine.id)}
+                          className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-300 hover:text-cyan-200 transition-colors"
+                        >
+                          <FiBookOpen size={13} />
+                          <span>{isDetailsExpanded ? 'Hide clinical details & precautions' : 'View clinical details & precautions'}</span>
+                          {isDetailsExpanded ? <FiChevronUp size={13} /> : <FiChevronDown size={13} />}
+                        </button>
                       </div>
                     </div>
 
@@ -611,6 +659,36 @@ export default function MedicineSearch() {
                       </Link>
                     </div>
                   </div>
+
+                  {/* Expandable Clinical Information Drawer */}
+                  {isDetailsExpanded && (
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-5 space-y-3.5 animate-fade-in text-xs leading-relaxed">
+                      <div className="flex items-center gap-2 text-cyan-300 font-bold uppercase tracking-wider text-[11px]">
+                        <FiShield size={14} className="text-cyan-400" />
+                        <span>Clinical Overview & Safety Guidance</span>
+                      </div>
+                      <div className="grid sm:grid-cols-2 gap-4 text-primary-100/90 pt-1">
+                        <div>
+                          <p className="font-semibold text-white mb-1">Dosage Form & Administration</p>
+                          <p className="text-primary-200/80">
+                            Supplied as {medicine.dosageForm || 'medication'} ({medicine.strength || 'standard concentration'}). Take strictly as indicated by your physician or on product labelling.
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-white mb-1">Dispensing Regulations</p>
+                          <p className="text-primary-200/80">
+                            {medicine.requiresPrescription
+                              ? 'Schedule H/Rx medication. Valid registered doctor prescription is mandatory upon pickup.'
+                              : 'Over-the-counter (OTC) medication. Can be purchased without prior prescription.'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="border-t border-white/10 pt-3 text-[11px] text-primary-200/60 italic flex items-center gap-1.5">
+                        <FiInfo size={12} className="shrink-0 text-cyan-400" />
+                        MediFindAI displays verified manufacturer data and does not substitute professional medical consultation.
+                      </div>
+                    </div>
+                  )}
 
                   {/* Pharmacy Availability & Price Comparison */}
                   <div>

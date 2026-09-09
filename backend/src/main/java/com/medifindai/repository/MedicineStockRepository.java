@@ -12,6 +12,10 @@ import java.util.Optional;
 
 public interface MedicineStockRepository extends JpaRepository<MedicineStock, Long> {
     List<MedicineStock> findByMedicineId(Long medicineId);
+
+    @Query("SELECT ms FROM MedicineStock ms JOIN FETCH ms.pharmacy p WHERE ms.medicine.id = :medicineId")
+    List<MedicineStock> findByMedicineIdWithPharmacy(@Param("medicineId") Long medicineId);
+
     List<MedicineStock> findByPharmacyId(Long pharmacyId);
     List<MedicineStock> findByPharmacyIdOrderByUpdatedAtDesc(Long pharmacyId);
     List<MedicineStock> findByPharmacyIdAndStockStatus(Long pharmacyId, MedicineStock.StockStatus stockStatus);

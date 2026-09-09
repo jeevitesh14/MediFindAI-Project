@@ -4,7 +4,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiArrowRight } from 'react-icons/fi';
+import { FiArrowRight, FiMail, FiLock } from 'react-icons/fi';
 
 import { loginUser, clearAuthError } from '../../store/slices/authSlice';
 import { loginSchema } from '../../utils/validationSchemas';
@@ -38,7 +38,6 @@ export default function Login() {
     }
   }, [error, dispatch]);
 
-
   const onSubmit = (data) => {
     dispatch(loginUser(data));
   };
@@ -71,6 +70,7 @@ export default function Login() {
             label="Email Address"
             name="email"
             type="email"
+            icon={FiMail}
             placeholder="you@example.com"
             register={register}
             error={errors.email}
@@ -80,6 +80,7 @@ export default function Login() {
               label="Password"
               name="password"
               type="password"
+              icon={FiLock}
               placeholder="••••••••"
               register={register}
               error={errors.password}
