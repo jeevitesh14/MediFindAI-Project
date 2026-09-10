@@ -11,10 +11,18 @@ const storedUser = (() => {
   }
 })();
 
+const storedToken = (() => {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || null;
+  } catch {
+    return null;
+  }
+})();
+
 const initialState = {
   user: storedUser,
-  accessToken: localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || null,
-  isAuthenticated: !!localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN),
+  accessToken: storedToken,
+  isAuthenticated: Boolean(storedToken && storedUser),
   status: 'idle',
   error: null,
 };

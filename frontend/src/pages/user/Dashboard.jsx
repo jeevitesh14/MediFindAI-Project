@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   FiSearch,
@@ -16,17 +16,70 @@ import {
   FiUploadCloud,
   FiFileText,
   FiPackage,
+  FiRefreshCw,
 } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import useAuth from '../../hooks/useAuth';
+import reservationService from '../../services/reservationService';
+import orderService from '../../services/orderService';
+import notificationService from '../../services/notificationService';
 import VoiceSearchButton from '../../components/forms/VoiceSearchButton';
 import PrescriptionUploadModal from '../../components/forms/PrescriptionUploadModal';
 
 export default function UserDashboard() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [quickQuery, setQuickQuery] = useState('');
   const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
+  const [telemetry, setTelemetry] = useState({
+    activeReservations: 0,
+    ordersCount: 0,
+    savedPharmacies: 0,
+    unreadNotifications: 0,
+  });
+  const [telemetryLoading, setTelemetryLoading] = useState(false);
   const navigate = useNavigate();
+
+  const fetchTelemetry = async () => {
+    if (!isAuthenticated) return;
+    setTelemetryLoading(true);
+    try {
+      const [resResults, ordResults, notifResults] = await Promise.allSettled([
+        reservationService.getMyReservations(),
+        orderService.getMyOrders(),
+        notificationService.getUnreadCount(),
+      ]);
+
+      const activeResCount =
+        resResults.status === 'fulfilled' && Array.isArray(resResults.value)
+          ? resResults.value.filter((r) => ['PENDING', 'CONFIRMED', 'READY_FOR_PICKUP'].includes(r.status)).length
+          : 0;
+
+      const totalOrdCount =
+        ordResults.status === 'fulfilled' && Array.isArray(ordResults.value)
+          ? ordResults.value.length
+          : 0;
+
+      const unreadCount =
+        notifResults.status === 'fulfilled' && typeof notifResults.value === 'number'
+          ? notifResults.value
+          : 0;
+
+      setTelemetry({
+        activeReservations: activeResCount,
+        ordersCount: totalOrdCount,
+        savedPharmacies: 0,
+        unreadNotifications: unreadCount,
+      });
+    } catch (err) {
+      console.warn('Telemetry loading partial notice:', err);
+    } finally {
+      setTelemetryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTelemetry();
+  }, [isAuthenticated]);
 
   const handleQuickSearch = (e) => {
     e.preventDefault();
@@ -44,11 +97,10 @@ export default function UserDashboard() {
     }
   };
 
-
   const stats = [
     {
       label: 'Active Reservations',
-      value: '0',
+      value: String(telemetry.activeReservations),
       desc: '24-hour guaranteed hold',
       icon: FiCalendar,
       gradient: 'from-cyan-500 to-blue-600',
@@ -56,7 +108,7 @@ export default function UserDashboard() {
     },
     {
       label: 'My Orders',
-      value: '0',
+      value: String(telemetry.ordersCount),
       desc: 'Track delivery & pickup',
       icon: FiPackage,
       gradient: 'from-emerald-500 to-teal-600',
@@ -64,7 +116,7 @@ export default function UserDashboard() {
     },
     {
       label: 'Saved Pharmacies',
-      value: '0',
+      value: String(telemetry.savedPharmacies),
       desc: 'Verified local stores',
       icon: FiHeart,
       gradient: 'from-purple-500 to-pink-600',
@@ -72,7 +124,7 @@ export default function UserDashboard() {
     },
     {
       label: 'Live Alerts & Stock',
-      value: '0',
+      value: String(telemetry.unreadNotifications),
       desc: 'Real-time updates',
       icon: FiBell,
       gradient: 'from-amber-500 to-orange-600',

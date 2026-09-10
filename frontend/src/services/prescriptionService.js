@@ -12,9 +12,6 @@ export const prescriptionService = {
     formData.append('file', file);
 
     const response = await apiClient.post('/prescriptions/scan', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
       onUploadProgress: (progressEvent) => {
         if (onUploadProgress && progressEvent.total) {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);

@@ -86,10 +86,10 @@ function normalizeError(error) {
     const status = error.response.status;
     const data = error.response.data;
 
-    if (data?.message && data.message !== 'Validation failed' && data.message !== 'Access Denied') {
-      message = data.message;
-    } else if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    if (Array.isArray(data?.errors) && data.errors.length > 0) {
       message = data.errors.join('. ');
+    } else if (data?.message && typeof data.message === 'string' && data.message.trim() !== '') {
+      message = data.message;
     } else if (status === 401) {
       message = 'Your login session has expired. Please log in again.';
     } else if (status === 403) {
@@ -97,7 +97,7 @@ function normalizeError(error) {
     } else if (status === 404) {
       message = 'The requested resource or pharmacy information could not be found.';
     } else if (status === 409) {
-      message = data?.message || 'A conflicting record already exists.';
+      message = 'A conflicting record already exists.';
     } else if (status >= 500) {
       message = 'Server error occurred. Please try again shortly.';
     }
@@ -114,14 +114,16 @@ function normalizeError(error) {
   return { ...error, message };
 }
 
-
-
 function clearSession() {
   localStorageSafe.removeItem('accessToken');
   localStorageSafe.removeItem('refreshToken');
   localStorageSafe.removeItem('user');
   if (typeof window !== 'undefined') {
-    window.location.href = '/login';
+    const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/', '/about', '/features', '/medicines', '/pharmacies'];
+    const currentPath = window.location.pathname;
+    if (!publicPaths.includes(currentPath)) {
+      window.location.href = '/login';
+    }
   }
 }
 
