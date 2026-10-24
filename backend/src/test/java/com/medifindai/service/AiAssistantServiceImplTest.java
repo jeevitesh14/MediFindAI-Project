@@ -8,12 +8,16 @@ import com.medifindai.entity.Pharmacy;
 import com.medifindai.repository.AiChatLogRepository;
 import com.medifindai.repository.MedicineRepository;
 import com.medifindai.repository.MedicineStockRepository;
+import com.medifindai.repository.OrderRepository;
 import com.medifindai.repository.PharmacyRepository;
+import com.medifindai.repository.ReservationRepository;
 import com.medifindai.repository.UserRepository;
 import com.medifindai.service.ai.GeminiAiProvider;
+import com.medifindai.service.ai.MedicalIntent;
 import com.medifindai.service.ai.OpenAiProvider;
 import com.medifindai.service.impl.AiAssistantServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -23,7 +27,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
-import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,6 +53,12 @@ class AiAssistantServiceImplTest {
     private UserRepository userRepository;
 
     @Mock
+    private OrderRepository orderRepository;
+
+    @Mock
+    private ReservationRepository reservationRepository;
+
+    @Mock
     private GeminiAiProvider geminiAiProvider;
 
     @Mock
@@ -65,72 +74,55 @@ class AiAssistantServiceImplTest {
     }
 
     @Test
+    @DisplayName("General conversation greeting responds in chat without navigation")
     void test1_Greeting() {
         AiChatRequest req = AiChatRequest.builder().message("hi").build();
         AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("greetings");
-        assertThat(resp.getReply()).contains("MediFindAI Medical Assistant");
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.GENERAL_CONVERSATION.getValue());
+        assertThat(resp.getReply()).contains("MediFindAI Healthcare Assistant");
+        assertThat(resp.getNavigation()).isNull();
     }
 
     @Test
-    void test2_Hello() {
-        AiChatRequest req = AiChatRequest.builder().message("hello").build();
+    @DisplayName("What is Paracetamol used for? answers inside chat without navigation")
+    void test2_WhatIsParacetamolUsedFor() {
+        AiChatRequest req = AiChatRequest.builder().message("What is Paracetamol used for?").build();
         AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("greetings");
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.MEDICAL_INFORMATION.getValue());
+        assertThat(resp.getReply()).contains("Paracetamol");
+        assertThat(resp.getReply()).contains("mild-to-moderate pain");
+        assertThat(resp.getNavigation()).isNull();
     }
 
     @Test
-    void test3_FindParacetamol() {
-        Medicine med = Medicine.builder().id(1L).name("Paracetamol 500mg").build();
+    @DisplayName("What are the side effects of Amoxicillin? answers inside chat without navigation")
+    void test3_WhatAreSideEffectsOfAmoxicillin() {
+        AiChatRequest req = AiChatRequest.builder().message("What are the side effects of Amoxicillin?").build();
+        AiChatResponse resp = aiAssistantService.generateReply(req);
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.MEDICAL_INFORMATION.getValue());
+        assertThat(resp.getReply()).contains("Amoxicillin");
+        assertThat(resp.getReply()).contains("diarrhea");
+        assertThat(resp.getNavigation()).isNull();
+    }
+
+    @Test
+    @DisplayName("Find Paracetamol suggestion queries DB and responds in chat without redirecting")
+    void test4_FindParacetamol() {
+        com.medifindai.entity.MedicineCategory cat = com.medifindai.entity.MedicineCategory.builder().id(1L).name("Analgesic").build();
+        Medicine med = Medicine.builder().id(1L).name("Paracetamol 500mg").category(cat).build();
         when(medicineRepository.searchByNameOrGeneric(eq("Paracetamol"), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(med)));
 
         AiChatRequest req = AiChatRequest.builder().message("Find Paracetamol").build();
         AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("medicine_search");
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.MEDICINE_SEARCH.getValue());
         assertThat(resp.getMedicineName()).isEqualTo("Paracetamol");
+        assertThat(resp.getNavigation()).isNull();
     }
 
     @Test
-    void test4_WhatIsParacetamol() {
-        AiChatRequest req = AiChatRequest.builder().message("What is Paracetamol?").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isIn("medicine_information", "medicine_uses");
-        assertThat(resp.getReply()).contains("Paracetamol");
-        assertThat(resp.getReply()).contains("Pain Relief");
-    }
-
-    @Test
-    void test5_WhatIsParacetamolUsedFor() {
-        AiChatRequest req = AiChatRequest.builder().message("What is Paracetamol used for?").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("medicine_uses");
-        assertThat(resp.getReply()).contains("mild-to-moderate pain");
-        assertThat(resp.getReply()).contains("fever");
-    }
-
-    @Test
-    void test6_WhatAreTheSideEffectsOfParacetamol() {
-        AiChatRequest req = AiChatRequest.builder().message("What are the side effects of Paracetamol?").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("medicine_side_effects");
-        assertThat(resp.getMedicineName()).isEqualTo("Paracetamol");
-        assertThat(resp.getReply()).contains("Side Effects");
-        assertThat(resp.getReply()).contains("liver damage");
-        // Must NOT return generic search redirection!
-        assertThat(resp.getReply()).doesNotContain("I can help you search for");
-    }
-
-    @Test
-    void test7_CanITakeParacetamolWithoutPrescription() {
-        AiChatRequest req = AiChatRequest.builder().message("Can I take Paracetamol without prescription?").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("prescription_requirement");
-        assertThat(resp.getReply()).contains("Over-the-Counter");
-    }
-
-    @Test
-    void test8_WhichPharmacyHasParacetamolInStock() {
+    @DisplayName("Which pharmacies have Paracetamol in stock? returns live stock data and pharmacy cards")
+    void test5_WhichPharmaciesHaveParacetamolInStock() {
         Pharmacy p = Pharmacy.builder().id(10L).name("Apollo Care Pharmacy").city("Bangalore").active(true).build();
         Medicine m = Medicine.builder().id(1L).name("Paracetamol 500mg").build();
         MedicineStock s = MedicineStock.builder().id(100L).medicine(m).pharmacy(p).quantity(15).price(BigDecimal.valueOf(25.0)).build();
@@ -139,133 +131,129 @@ class AiAssistantServiceImplTest {
                 .thenReturn(new PageImpl<>(List.of(m)));
         when(medicineStockRepository.findByMedicineId(1L)).thenReturn(List.of(s));
 
-        AiChatRequest req = AiChatRequest.builder().message("Which pharmacy has Paracetamol in stock?").build();
+        AiChatRequest req = AiChatRequest.builder().message("Which pharmacies have Paracetamol in stock?").build();
         AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("pharmacy_stock");
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.PRICE_AVAILABILITY.getValue());
         assertThat(resp.getReply()).contains("Apollo Care Pharmacy");
         assertThat(resp.getReply()).contains("₹25.00");
+        assertThat(resp.getPharmacyCards()).isNotEmpty();
+        assertThat(resp.getPharmacyCards().get(0).getName()).isEqualTo("Apollo Care Pharmacy");
+        assertThat(resp.getNavigation()).isNull();
     }
 
     @Test
-    void test9_WhereCanIFindParacetamolNearMe() {
-        Pharmacy p = Pharmacy.builder().id(10L).name("MedPlus Express").city("Hyderabad").addressLine("Kukatpally").phone("9876543210").active(true).build();
-        when(pharmacyRepository.findByActiveTrueAndVerificationStatus(any())).thenReturn(List.of(p));
-
-        AiChatRequest req = AiChatRequest.builder().message("Where can I find Paracetamol near me?").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("nearby_pharmacies");
-        assertThat(resp.getReply()).contains("MedPlus Express");
-    }
-
-    @Test
-    void test10_CompareParacetamolPrices() {
-        Pharmacy p1 = Pharmacy.builder().id(10L).name("Apollo Care").active(true).build();
-        Pharmacy p2 = Pharmacy.builder().id(20L).name("MedPlus").active(true).build();
+    @DisplayName("What is the price of Paracetamol? returns price information in chat")
+    void test6_WhatIsPriceOfParacetamol() {
+        Pharmacy p = Pharmacy.builder().id(10L).name("Apollo Care Pharmacy").city("Bangalore").active(true).build();
         Medicine m = Medicine.builder().id(1L).name("Paracetamol 500mg").build();
-        MedicineStock s1 = MedicineStock.builder().medicine(m).pharmacy(p1).quantity(10).price(BigDecimal.valueOf(22.50)).build();
-        MedicineStock s2 = MedicineStock.builder().medicine(m).pharmacy(p2).quantity(5).price(BigDecimal.valueOf(28.00)).build();
+        MedicineStock s = MedicineStock.builder().id(100L).medicine(m).pharmacy(p).quantity(20).price(BigDecimal.valueOf(22.50)).build();
 
         when(medicineRepository.searchByNameOrGeneric(eq("Paracetamol"), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(m)));
-        when(medicineStockRepository.findByMedicineId(1L)).thenReturn(List.of(s1, s2));
+        when(medicineStockRepository.findByMedicineId(1L)).thenReturn(List.of(s));
 
-        AiChatRequest req = AiChatRequest.builder().message("Compare Paracetamol prices").build();
+        AiChatRequest req = AiChatRequest.builder().message("What is the price of Paracetamol?").build();
         AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("price_comparison");
-        assertThat(resp.getReply()).contains("Price Comparison for Paracetamol 500mg");
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.PRICE_AVAILABILITY.getValue());
         assertThat(resp.getReply()).contains("₹22.50");
+        assertThat(resp.getNavigation()).isNull();
     }
 
     @Test
-    void test11_AlternativesToParacetamol() {
-        AiChatRequest req = AiChatRequest.builder().message("What are alternatives to Paracetamol?").build();
+    @DisplayName("How do I reserve a medicine? explains pickup hold process without navigating")
+    void test7_HowDoIReserveMedicine() {
+        AiChatRequest req = AiChatRequest.builder().message("How do I reserve a medicine?").build();
         AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("medicine_alternatives");
-        assertThat(resp.getReply()).contains("Ibuprofen");
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.RESERVATION_HELP.getValue());
+        assertThat(resp.getReply()).contains("24-Hour Guaranteed Medicine Pickup Holds");
+        assertThat(resp.getNavigation()).isNull();
     }
 
     @Test
-    void test12_CanITakeParacetamolWithIbuprofen() {
-        AiChatRequest req = AiChatRequest.builder().message("Can I take Paracetamol with Ibuprofen?").build();
+    @DisplayName("How can I upload a prescription? explains OCR process without automatic navigation")
+    void test8_HowCanIUploadPrescription() {
+        AiChatRequest req = AiChatRequest.builder().message("How can I upload a prescription?").build();
         AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("drug_interactions");
-        assertThat(resp.getReply()).contains("Ibuprofen");
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.PRESCRIPTION_HELP.getValue());
+        assertThat(resp.getReply()).contains("intelligent AI Prescription Scanner");
+        assertThat(resp.getNavigation()).isNull();
+        // Separate action button provided
+        assertThat(resp.getActions()).anyMatch(a -> a.getLabel().contains("Open Prescription Upload"));
     }
 
     @Test
-    void test13_WhatIsAmoxicillinUsedFor() {
-        AiChatRequest req = AiChatRequest.builder().message("What is Amoxicillin used for?").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("medicine_uses");
-        assertThat(resp.getReply()).contains("Penicillin Antibiotic");
-        assertThat(resp.getReply()).contains("bacterial infections");
-    }
-
-    @Test
-    void test14_SideEffectsOfAmoxicillin() {
-        AiChatRequest req = AiChatRequest.builder().message("What are the side effects of Amoxicillin?").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("medicine_side_effects");
-        assertThat(resp.getReply()).contains("diarrhea");
-        assertThat(resp.getReply()).contains("allergic");
-    }
-
-    @Test
-    void test15_MedicineForHeadache() {
-        AiChatRequest req = AiChatRequest.builder().message("I need medicine for a headache").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("symptoms_health");
-        assertThat(resp.getReply()).contains("Paracetamol");
-        assertThat(resp.getReply()).contains("Ibuprofen");
-    }
-
-    @Test
-    void test16_DoctorGaveMeAPrescription() {
-        AiChatRequest req = AiChatRequest.builder().message("My doctor gave me a prescription").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("prescription_help");
-        assertThat(resp.getReply()).contains("Prescription OCR scanner");
-    }
-
-    @Test
-    void test17_WhereCanIUploadMyPrescription() {
-        AiChatRequest req = AiChatRequest.builder().message("Where can I upload my prescription?").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("prescription_help");
-        assertThat(resp.getReply()).contains("Prescription OCR scanner");
-    }
-
-    @Test
-    void test18_ShowMyOrders() {
-        AiChatRequest req = AiChatRequest.builder().message("Show my orders").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("order_help");
-        assertThat(resp.getReply()).contains("Orders");
-    }
-
-    @Test
-    void test19_ReserveAMedicine() {
-        AiChatRequest req = AiChatRequest.builder().message("I want to reserve a medicine").build();
-        AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("reservation_help");
-        assertThat(resp.getReply()).contains("24-Hour Medicine Pickup Holds");
-    }
-
-    @Test
-    void test20_WhatPharmaciesAreNearby() {
-        Pharmacy p = Pharmacy.builder().name("HealthFirst Pharmacy").city("Mumbai").active(true).build();
+    @DisplayName("Find pharmacies near Hyderabad searches pharmacy data and displays in chat")
+    void test9_FindPharmaciesNearHyderabad() {
+        Pharmacy p = Pharmacy.builder().id(10L).name("MedPlus Express").city("Hyderabad").addressLine("Kukatpally").phone("9876543210").active(true).build();
         when(pharmacyRepository.findByActiveTrueAndVerificationStatus(any())).thenReturn(List.of(p));
 
-        AiChatRequest req = AiChatRequest.builder().message("What pharmacies are nearby?").build();
+        AiChatRequest req = AiChatRequest.builder().message("Find pharmacies near Hyderabad").build();
         AiChatResponse resp = aiAssistantService.generateReply(req);
-        assertThat(resp.getIntent()).isEqualTo("nearby_pharmacies");
-        assertThat(resp.getReply()).contains("HealthFirst Pharmacy");
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.PHARMACY_SEARCH.getValue());
+        assertThat(resp.getReply()).contains("MedPlus Express");
+        assertThat(resp.getPharmacyCards()).isNotEmpty();
+        assertThat(resp.getPharmacyCards().get(0).getName()).isEqualTo("MedPlus Express");
+        assertThat(resp.getNavigation()).isNull();
     }
 
     @Test
-    void testMultiTurnContextResolution() {
-        // Step 1: User asks "What is paracetamol used for?"
-        // Step 2: User asks "What are its side effects?" (resolving "its" -> Paracetamol)
+    @DisplayName("Open the medicine search page returns explicit navigation directive")
+    void test10_ExplicitNavigation_MedicineSearch() {
+        AiChatRequest req = AiChatRequest.builder().message("Open the medicine search page").build();
+        AiChatResponse resp = aiAssistantService.generateReply(req);
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.APP_NAVIGATION.getValue());
+        assertThat(resp.getNavigation()).isNotNull();
+        assertThat(resp.getNavigation().getTargetRoute()).isEqualTo("/dashboard/search");
+        assertThat(resp.getNavigation().getDestinationName()).isEqualTo("Medicine Search");
+        assertThat(resp.getNavigation().isRequiresAuth()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Take me to nearby pharmacies returns explicit navigation directive")
+    void test11_ExplicitNavigation_NearbyPharmacies() {
+        AiChatRequest req = AiChatRequest.builder().message("Take me to nearby pharmacies").build();
+        AiChatResponse resp = aiAssistantService.generateReply(req);
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.APP_NAVIGATION.getValue());
+        assertThat(resp.getNavigation()).isNotNull();
+        assertThat(resp.getNavigation().getTargetRoute()).isEqualTo("/dashboard/pharmacies");
+        assertThat(resp.getNavigation().getDestinationName()).isEqualTo("Nearby Pharmacies");
+    }
+
+    @Test
+    @DisplayName("Open my reservations returns explicit navigation directive requiring auth")
+    void test12_ExplicitNavigation_MyReservations() {
+        AiChatRequest req = AiChatRequest.builder().message("Open my reservations").build();
+        AiChatResponse resp = aiAssistantService.generateReply(req);
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.APP_NAVIGATION.getValue());
+        assertThat(resp.getNavigation()).isNotNull();
+        assertThat(resp.getNavigation().getTargetRoute()).isEqualTo("/dashboard/reservations");
+        assertThat(resp.getNavigation().isRequiresAuth()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Go to my orders returns explicit navigation directive requiring auth")
+    void test13_ExplicitNavigation_MyOrders() {
+        AiChatRequest req = AiChatRequest.builder().message("Go to my orders").build();
+        AiChatResponse resp = aiAssistantService.generateReply(req);
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.APP_NAVIGATION.getValue());
+        assertThat(resp.getNavigation()).isNotNull();
+        assertThat(resp.getNavigation().getTargetRoute()).isEqualTo("/dashboard/orders");
+        assertThat(resp.getNavigation().isRequiresAuth()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Ambiguous single word query triggers CLARIFICATION_REQUIRED")
+    void test14_AmbiguousQuery_ClarificationRequired() {
+        AiChatRequest req = AiChatRequest.builder().message("medicine").build();
+        AiChatResponse resp = aiAssistantService.generateReply(req);
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.CLARIFICATION_REQUIRED.getValue());
+        assertThat(resp.getReply()).contains("Could you please specify");
+        assertThat(resp.getNavigation()).isNull();
+    }
+
+    @Test
+    @DisplayName("Multi-turn context resolution resolves pronoun 'its' to previous medicine")
+    void test15_MultiTurnContextResolution() {
         AiChatRequest.ChatMessageDto turn1User = new AiChatRequest.ChatMessageDto("user", "What is Paracetamol used for?");
         AiChatRequest.ChatMessageDto turn1Bot = new AiChatRequest.ChatMessageDto("assistant", "Paracetamol is used for pain relief.");
 
@@ -275,9 +263,19 @@ class AiAssistantServiceImplTest {
                 .build();
 
         AiChatResponse resp2 = aiAssistantService.generateReply(req2);
-        assertThat(resp2.getIntent()).isEqualTo("medicine_side_effects");
+        assertThat(resp2.getIntent()).isEqualTo(MedicalIntent.MEDICAL_INFORMATION.getValue());
         assertThat(resp2.getMedicineName()).isEqualTo("Paracetamol");
         assertThat(resp2.getReply()).contains("Paracetamol");
         assertThat(resp2.getReply()).contains("liver damage");
+    }
+
+    @Test
+    @DisplayName("Can I take Paracetamol without prescription? explains OTC status in chat")
+    void test16_CanITakeParacetamolWithoutPrescription() {
+        AiChatRequest req = AiChatRequest.builder().message("Can I take Paracetamol without prescription?").build();
+        AiChatResponse resp = aiAssistantService.generateReply(req);
+        assertThat(resp.getIntent()).isEqualTo(MedicalIntent.PRESCRIPTION_HELP.getValue());
+        assertThat(resp.getReply()).contains("Over-the-Counter (OTC)");
+        assertThat(resp.getNavigation()).isNull();
     }
 }

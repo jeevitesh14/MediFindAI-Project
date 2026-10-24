@@ -7,6 +7,9 @@ import NearbyPharmacies from './NearbyPharmacies';
 import pharmacyService from '../../services/pharmacyService';
 
 vi.mock('../../services/pharmacyService');
+vi.mock('../../components/PharmacyMap', () => ({
+  default: () => <div data-testid="pharmacy-map">Nearby Pharmacy Map</div>,
+}));
 
 describe('NearbyPharmacies Component', () => {
   beforeEach(() => {

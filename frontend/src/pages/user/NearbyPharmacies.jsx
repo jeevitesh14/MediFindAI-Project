@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
+import PharmacyMap from '../../components/PharmacyMap';
 import {
   FiMapPin,
   FiCrosshair,
@@ -353,11 +354,10 @@ export default function NearbyPharmacies() {
                   key={preset.label}
                   type="button"
                   onClick={() => handleSelectPreset(preset)}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold transition-all active:scale-95 ${
-                    isSelected
+                  className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold transition-all active:scale-95 ${isSelected
                       ? 'bg-gradient-to-r from-cyan-500 to-primary-600 text-white shadow-md shadow-cyan-500/25 ring-2 ring-cyan-400/40'
                       : 'border border-white/15 bg-white/5 text-primary-100 hover:bg-white/15 hover:text-white'
-                  }`}
+                    }`}
                 >
                   <FiMapPin size={11} className="text-cyan-400" />
                   {preset.label}
@@ -388,11 +388,10 @@ export default function NearbyPharmacies() {
                   key={r}
                   type="button"
                   onClick={() => setRadiusKm(r)}
-                  className={`rounded-full px-3.5 py-1 text-xs font-bold transition-all ${
-                    radiusKm === r
+                  className={`rounded-full px-3.5 py-1 text-xs font-bold transition-all ${radiusKm === r
                       ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30'
                       : 'border border-white/15 bg-white/5 text-primary-100/80 hover:bg-white/10 hover:text-white'
-                  }`}
+                    }`}
                 >
                   {r} km
                 </button>
@@ -407,6 +406,19 @@ export default function NearbyPharmacies() {
       </section>
 
       {/* Initial Prompt before picking location */}
+
+      {/* OpenStreetMap - Nearby Pharmacies */}
+      {coordinates && (
+        <PharmacyMap
+          center={{
+            lat: coordinates.lat,
+            lng: coordinates.lng,
+          }}
+          pharmacies={pharmacies}
+        />
+      )}
+
+
       {!coordinates && !isLocating && (
         <div className="rounded-4xl border border-dashed border-white/20 bg-white/5 p-12 text-center text-primary-100/80 backdrop-blur-xl shadow-2xl space-y-4">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-cyan-500/10 border border-cyan-400/30 text-cyan-300">

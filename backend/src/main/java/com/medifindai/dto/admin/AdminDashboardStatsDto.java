@@ -16,9 +16,12 @@ public class AdminDashboardStatsDto {
     private long totalAdmins;
 
     private long totalPharmacies;
+    private long activePharmacies;
+    private long inactivePharmacies;
     private long pendingPharmacies;
     private long verifiedPharmacies;
     private long rejectedPharmacies;
+    private java.util.List<AdminPharmacyDto> recentlyAddedPharmacies;
 
     private long totalMedicines;
     private long totalInventoryItems;

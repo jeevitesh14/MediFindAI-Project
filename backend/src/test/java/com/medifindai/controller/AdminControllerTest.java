@@ -64,4 +64,51 @@ class AdminControllerTest {
         assertThat(response.getData()).hasSize(1);
         assertThat(response.getData().get(0).getEmail()).isEqualTo("john@example.com");
     }
+
+    @Test
+    void createPharmacy_success() {
+        com.medifindai.dto.admin.CreatePharmacyAdminRequest req = com.medifindai.dto.admin.CreatePharmacyAdminRequest.builder()
+                .name("Apollo Care")
+                .licenseNumber("LIC-12345")
+                .ownerId(2L)
+                .addressLine("Road 1")
+                .city("Hyderabad")
+                .state("Telangana")
+                .phone("9876543210")
+                .latitude(17.3850)
+                .longitude(78.4867)
+                .build();
+
+        com.medifindai.dto.admin.AdminPharmacyDto created = com.medifindai.dto.admin.AdminPharmacyDto.builder()
+                .id(1L)
+                .name("Apollo Care")
+                .licenseNumber("LIC-12345")
+                .ownerId(2L)
+                .active(true)
+                .build();
+
+        when(adminService.createPharmacy(any())).thenReturn(created);
+
+        org.springframework.http.ResponseEntity<ApiResponse<com.medifindai.dto.admin.AdminPharmacyDto>> response =
+                adminController.createPharmacy(req);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody().getData().getName()).isEqualTo("Apollo Care");
+    }
+
+    @Test
+    void togglePharmacyActive_success() {
+        com.medifindai.dto.admin.AdminPharmacyDto dto = com.medifindai.dto.admin.AdminPharmacyDto.builder()
+                .id(1L)
+                .active(false)
+                .build();
+
+        when(adminService.togglePharmacyActive(1L, false)).thenReturn(dto);
+
+        ApiResponse<com.medifindai.dto.admin.AdminPharmacyDto> res =
+                adminController.togglePharmacyActive(1L, java.util.Map.of("active", false));
+
+        assertThat(res.isSuccess()).isTrue();
+        assertThat(res.getData().isActive()).isFalse();
+    }
 }

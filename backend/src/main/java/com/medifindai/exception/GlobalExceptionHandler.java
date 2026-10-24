@@ -59,6 +59,46 @@ public class GlobalExceptionHandler {
 
     }
 
+    @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMediaTypeNotSupported(
+            org.springframework.web.HttpMediaTypeNotSupportedException ex, HttpServletRequest req) {
+        log.warn("Media type not supported for path {}: {}", req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "Unsupported media type. Prescription images must be uploaded as multipart/form-data.", req, null);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceeded(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex, HttpServletRequest req) {
+        log.warn("Uploaded file exceeds max size for path {}: {}", req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.PAYLOAD_TOO_LARGE,
+                "File size exceeds the allowed limit. Please upload an image under 5 MB.", req, null);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MultipartException.class)
+    public ResponseEntity<ErrorResponse> handleMultipart(
+            org.springframework.web.multipart.MultipartException ex, HttpServletRequest req) {
+        log.warn("Multipart request error for path {}: {}", req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST,
+                "Invalid multipart request or missing file boundary. Please ensure the prescription image is uploaded correctly.", req, null);
+    }
+
+    @ExceptionHandler({
+            org.springframework.web.multipart.support.MissingServletRequestPartException.class,
+            org.springframework.web.bind.MissingServletRequestParameterException.class
+    })
+    public ResponseEntity<ErrorResponse> handleMissingRequestPart(Exception ex, HttpServletRequest req) {
+        log.warn("Missing required request parameter/part for path {}: {}", req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST,
+                "Required prescription file parameter ('file') is missing from the request.", req, null);
+    }
+
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(
+            org.springframework.web.HttpRequestMethodNotSupportedException ex, HttpServletRequest req) {
+        return build(HttpStatus.METHOD_NOT_ALLOWED, ex.getMessage(), req, null);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex, HttpServletRequest req) {
         log.error("Unhandled exception", ex);

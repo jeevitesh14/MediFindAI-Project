@@ -37,6 +37,8 @@ public class AdminPharmacyDto {
     private String verificationStatus;
     private boolean active;
     private Double rating;
+    private String logoUrl;
     private int totalMedicinesStocked;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

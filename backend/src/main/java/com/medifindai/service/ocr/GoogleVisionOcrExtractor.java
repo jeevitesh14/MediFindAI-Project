@@ -76,7 +76,7 @@ public class GoogleVisionOcrExtractor implements OcrTextExtractor {
                         .provider(getProviderName())
                         .success(false)
                         .fallback(true)
-                        .message("Google Vision OCR failed to process the image.")
+                        .message("Prescription extraction is temporarily unavailable. Please try again.")
                         .build();
             }
 
@@ -94,6 +94,16 @@ public class GoogleVisionOcrExtractor implements OcrTextExtractor {
                     }
                 }
 
+                if (extractedText.isBlank()) {
+                    return OcrExtractionResult.builder()
+                            .rawText("")
+                            .provider(getProviderName())
+                            .success(true)
+                            .fallback(false)
+                            .message("The prescription image could not be read. Please upload a clearer image.")
+                            .build();
+                }
+
                 return OcrExtractionResult.builder()
                         .rawText(extractedText.trim())
                         .provider(getProviderName())
@@ -108,7 +118,7 @@ public class GoogleVisionOcrExtractor implements OcrTextExtractor {
                     .provider(getProviderName())
                     .success(true)
                     .fallback(false)
-                    .message("No text detected in the provided prescription image.")
+                    .message("The prescription image could not be read. Please upload a clearer image.")
                     .build();
 
         } catch (Exception ex) {
@@ -118,7 +128,7 @@ public class GoogleVisionOcrExtractor implements OcrTextExtractor {
                     .provider(getProviderName())
                     .success(false)
                     .fallback(true)
-                    .message("Error communicating with Google Vision API: " + ex.getMessage())
+                    .message("Prescription extraction is temporarily unavailable. Please try again.")
                     .build();
         }
     }

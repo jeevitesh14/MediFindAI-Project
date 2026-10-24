@@ -20,6 +20,8 @@ public class PrescriptionScanResponse {
     private String rawExtractedText;
     private List<String> detectedMedicineNames;
     private List<MedicineSearchResponse> matchedMedicines;
+    private List<String> unmatchedMedicineNames;
+    private String statusMessage;
     private String ocrProvider;
     private boolean fallbackMode;
     private String fallbackNotice;

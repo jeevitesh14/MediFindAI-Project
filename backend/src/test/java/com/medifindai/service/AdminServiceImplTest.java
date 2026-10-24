@@ -1,8 +1,7 @@
 package com.medifindai.service;
 
-import com.medifindai.dto.admin.AdminDashboardStatsDto;
-import com.medifindai.dto.admin.AdminPharmacyDto;
-import com.medifindai.dto.admin.VerifyPharmacyRequest;
+import com.medifindai.dto.admin.*;
+import com.medifindai.exception.DuplicateResourceException;
 import com.medifindai.entity.*;
 import com.medifindai.repository.*;
 import com.medifindai.service.impl.AdminServiceImpl;
@@ -115,16 +114,93 @@ class AdminServiceImplTest {
     @Test
     void testGetPharmacies() {
         Pageable pageable = PageRequest.of(0, 10);
-        when(pharmacyRepository.searchPharmaciesAdmin(eq(Pharmacy.VerificationStatus.PENDING), eq("HealthCare"), eq(pageable)))
+        when(pharmacyRepository.searchPharmaciesAdmin(eq(Pharmacy.VerificationStatus.PENDING), isNull(), eq("HealthCare"), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of(samplePharmacy)));
         when(stockRepository.countByPharmacyId(100L)).thenReturn(5);
 
-        Page<AdminPharmacyDto> result = adminService.getPharmacies(Pharmacy.VerificationStatus.PENDING, "HealthCare", pageable);
+        Page<AdminPharmacyDto> result = adminService.getPharmacies(Pharmacy.VerificationStatus.PENDING, null, "HealthCare", pageable);
 
         assertNotNull(result);
         assertEquals(1, result.getContent().size());
         assertEquals("HealthCare Plus Pharmacy", result.getContent().get(0).getName());
         assertEquals("LIC-2026-99", result.getContent().get(0).getLicenseNumber());
+    }
+
+    @Test
+    void testCreatePharmacy_Success() {
+        CreatePharmacyAdminRequest req = CreatePharmacyAdminRequest.builder()
+                .name("New Apollo Pharmacy")
+                .licenseNumber("LIC-NEW-001")
+                .ownerId(10L)
+                .addressLine("Road 2")
+                .city("Hyderabad")
+                .state("Telangana")
+                .postalCode("500001")
+                .latitude(17.3850)
+                .longitude(78.4867)
+                .phone("9876543210")
+                .email("apollo.new@example.com")
+                .active(true)
+                .build();
+
+        when(pharmacyRepository.existsByLicenseNumber("LIC-NEW-001")).thenReturn(false);
+        when(userRepository.findById(10L)).thenReturn(Optional.of(sampleOwner));
+        when(pharmacyRepository.save(any(Pharmacy.class))).thenAnswer(i -> {
+            Pharmacy p = i.getArgument(0);
+            p.setId(200L);
+            return p;
+        });
+
+        AdminPharmacyDto created = adminService.createPharmacy(req);
+
+        assertNotNull(created);
+        assertEquals("New Apollo Pharmacy", created.getName());
+        assertEquals("LIC-NEW-001", created.getLicenseNumber());
+    }
+
+    @Test
+    void testCreatePharmacy_DuplicateLicense_ThrowsException() {
+        CreatePharmacyAdminRequest req = CreatePharmacyAdminRequest.builder()
+                .name("Duplicate Pharmacy")
+                .licenseNumber("LIC-2026-99")
+                .ownerId(10L)
+                .addressLine("Road 1")
+                .city("Hyderabad")
+                .state("Telangana")
+                .phone("9876543210")
+                .latitude(17.3850)
+                .longitude(78.4867)
+                .build();
+
+        when(pharmacyRepository.existsByLicenseNumber("LIC-2026-99")).thenReturn(true);
+
+        assertThrows(DuplicateResourceException.class, () -> adminService.createPharmacy(req));
+    }
+
+    @Test
+    void testTogglePharmacyActive() {
+        when(pharmacyRepository.findById(100L)).thenReturn(Optional.of(samplePharmacy));
+        when(pharmacyRepository.save(any(Pharmacy.class))).thenAnswer(i -> i.getArgument(0));
+
+        AdminPharmacyDto toggled = adminService.togglePharmacyActive(100L, false);
+
+        assertNotNull(toggled);
+        assertFalse(toggled.isActive());
+    }
+
+    @Test
+    void testAssignPharmacyOwner() {
+        User newOwner = User.builder().id(20L).email("newowner@example.com").role(Role.USER).build();
+        when(pharmacyRepository.findById(100L)).thenReturn(Optional.of(samplePharmacy));
+        when(userRepository.findById(20L)).thenReturn(Optional.of(newOwner));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(pharmacyRepository.save(any(Pharmacy.class))).thenAnswer(i -> i.getArgument(0));
+
+        AdminPharmacyDto result = adminService.assignPharmacyOwner(100L, 20L);
+
+        assertNotNull(result);
+        assertEquals(20L, result.getOwnerId());
+        assertEquals(Role.PHARMACY_OWNER, newOwner.getRole());
     }
 
     @Test

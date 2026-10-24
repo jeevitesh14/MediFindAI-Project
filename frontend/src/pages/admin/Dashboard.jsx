@@ -70,7 +70,7 @@ export default function AdminDashboard() {
     {
       label: t('admin.totalPharmacies', 'Pharmacies'),
       value: stats?.totalPharmacies ?? '—',
-      subtitle: `${stats?.verifiedPharmacies ?? 0} verified · ${stats?.pendingPharmacies ?? 0} pending`,
+      subtitle: `${stats?.activePharmacies ?? 0} active · ${stats?.inactivePharmacies ?? 0} inactive · ${stats?.pendingPharmacies ?? 0} pending`,
       icon: FiShoppingBag,
       gradient: 'from-emerald-500 to-teal-600',
       link: '/admin/pharmacies',
@@ -124,7 +124,7 @@ export default function AdminDashboard() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
             <button
               onClick={fetchStats}
               disabled={loading}
@@ -134,8 +134,14 @@ export default function AdminDashboard() {
               <span>Refresh Stats</span>
             </button>
             <Link
+              to="/admin/pharmacies?action=new"
+              className="btn-primary py-3 px-5 text-xs font-bold shadow-lg shadow-cyan-500/25 inline-flex items-center gap-1.5"
+            >
+              <span>+ Add Pharmacy</span>
+            </Link>
+            <Link
               to="/admin/pharmacies"
-              className="btn-primary py-3 px-6 text-xs font-bold shadow-lg shadow-cyan-500/25"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 px-4 py-3 text-xs font-bold text-cyan-300 transition-all"
             >
               <FiCheckCircle size={15} /> Verifications
             </Link>
@@ -171,6 +177,108 @@ export default function AdminDashboard() {
             </div>
           </Link>
         ))}
+      </section>
+
+      {/* Pharmacy Network Telemetry & Quick Management */}
+      <section className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div>
+            <div className="inline-flex items-center gap-2 text-xs font-bold text-cyan-400 mb-1">
+              <FiShoppingBag size={14} /> Pharmacy Network Telemetry
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black text-white">
+              Pharmacy Lifecycle & Operations
+            </h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/admin/pharmacies?action=new"
+              className="btn-primary py-2 px-4 text-xs font-bold inline-flex items-center gap-1.5 shadow-md shadow-cyan-500/20"
+            >
+              <span>+ Add Pharmacy</span>
+            </Link>
+            <Link
+              to="/admin/pharmacies"
+              className="rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 transition-all inline-flex items-center gap-1.5"
+            >
+              <span>Manage Network</span>
+              <FiArrowRight size={13} />
+            </Link>
+          </div>
+        </div>
+
+        {/* Telemetry Chips */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+          <div className="rounded-2xl bg-slate-950/70 border border-slate-800/80 p-4">
+            <span className="text-[11px] font-semibold text-slate-400 block">Total Partners</span>
+            <span className="text-2xl font-black text-white mt-1 block">{stats?.totalPharmacies ?? 0}</span>
+          </div>
+          <div className="rounded-2xl bg-emerald-950/20 border border-emerald-500/30 p-4">
+            <span className="text-[11px] font-semibold text-emerald-300 flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-400" /> Active Pharmacies
+            </span>
+            <span className="text-2xl font-black text-emerald-200 mt-1 block">{stats?.activePharmacies ?? 0}</span>
+          </div>
+          <div className="rounded-2xl bg-slate-950/70 border border-slate-800/80 p-4">
+            <span className="text-[11px] font-semibold text-rose-300/90 flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-rose-400" /> Inactive
+            </span>
+            <span className="text-2xl font-black text-rose-200 mt-1 block">{stats?.inactivePharmacies ?? 0}</span>
+          </div>
+          <div className="rounded-2xl bg-amber-950/20 border border-amber-500/30 p-4">
+            <span className="text-[11px] font-semibold text-amber-300 flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" /> Pending Review
+            </span>
+            <span className="text-2xl font-black text-amber-200 mt-1 block">{stats?.pendingPharmacies ?? 0}</span>
+          </div>
+          <div className="rounded-2xl bg-slate-950/70 border border-slate-800/80 p-4 col-span-2 sm:col-span-1">
+            <span className="text-[11px] font-semibold text-cyan-300 block">Registered Owners</span>
+            <span className="text-2xl font-black text-cyan-200 mt-1 block">{stats?.totalPharmacyOwners ?? 0}</span>
+          </div>
+        </div>
+
+        {/* Recently Added Pharmacies Widget */}
+        {stats?.recentlyAddedPharmacies && stats.recentlyAddedPharmacies.length > 0 && (
+          <div className="space-y-3 pt-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Recently Onboarded Pharmacies
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {stats.recentlyAddedPharmacies.slice(0, 3).map((p) => (
+                <div
+                  key={p.id}
+                  className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 hover:border-slate-700 transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-sm font-bold text-white truncate">{p.name}</h4>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        p.active ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                      }`}>
+                        {p.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {p.city}, {p.state} · Owner: <span className="text-slate-300 font-medium">{p.ownerName || 'Unassigned'}</span>
+                    </p>
+                    <p className="text-[11px] font-mono text-cyan-400/90 mt-1">
+                      {p.licenseNumber}
+                    </p>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                    <span className="text-slate-500 text-[11px]">{p.totalMedicinesStocked || 0} items stocked</span>
+                    <Link
+                      to={`/admin/pharmacies?search=${encodeURIComponent(p.name)}`}
+                      className="text-cyan-400 hover:text-cyan-300 font-semibold text-xs inline-flex items-center gap-1"
+                    >
+                      View <FiArrowRight size={11} />
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Admin Operations Grid */}

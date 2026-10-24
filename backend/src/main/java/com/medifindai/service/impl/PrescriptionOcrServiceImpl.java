@@ -11,8 +11,7 @@ import com.medifindai.exception.ResourceNotFoundException;
 import com.medifindai.repository.PrescriptionOcrRecordRepository;
 import com.medifindai.repository.UserRepository;
 import com.medifindai.service.PrescriptionOcrService;
-import com.medifindai.service.ocr.FallbackOcrExtractor;
-import com.medifindai.service.ocr.GoogleVisionOcrExtractor;
+import com.medifindai.service.ocr.GeminiOcrExtractor;
 import com.medifindai.service.ocr.MedicineMatcherService;
 import com.medifindai.service.ocr.OcrExtractionResult;
 import com.medifindai.service.ocr.OcrTextExtractor;
@@ -40,7 +39,9 @@ public class PrescriptionOcrServiceImpl implements PrescriptionOcrService {
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
             "image/jpeg",
             "image/jpg",
+            "image/pjpeg",
             "image/png",
+            "image/x-png",
             "image/webp"
     );
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
@@ -50,11 +51,10 @@ public class PrescriptionOcrServiceImpl implements PrescriptionOcrService {
             "Prescription images may contain sensitive health information. MediFindAI helps identify medicine names but does not provide diagnosis, dosage, or medical advice. Always verify prescription details with a pharmacist or qualified healthcare professional.";
 
     private final UserRepository userRepository;
-    private final PrescriptionOcrRecordRepository prescriptionOcrRecordRepository;
-    private final GoogleVisionOcrExtractor googleVisionOcrExtractor;
-    private final FallbackOcrExtractor fallbackOcrExtractor;
+    private final GeminiOcrExtractor geminiOcrExtractor;
     private final MedicineMatcherService medicineMatcherService;
     private final ObjectMapper objectMapper;
+    private final PrescriptionOcrRecordRepository prescriptionOcrRecordRepository;
 
     @Value("${app.prescription.upload-dir:./uploads/prescriptions}")
     private String uploadDir;
@@ -71,16 +71,25 @@ public class PrescriptionOcrServiceImpl implements PrescriptionOcrService {
         String storedFilePath = saveFileLocally(file);
 
         // 2. Select appropriate OCR extractor
-        OcrTextExtractor extractor = selectExtractor();
-        byte[] fileBytes;
-        try {
-            fileBytes = file.getBytes();
-        } catch (IOException e) {
-            log.error("Failed to read prescription file bytes", e);
-            throw new BadRequestException("Failed to read uploaded prescription file.");
-        }
+        OcrTextExtractor extractor = geminiOcrExtractor;
+        // Read uploaded image
+byte[] fileBytes;
 
-        OcrExtractionResult extractionResult = extractor.extractText(fileBytes, file.getContentType());
+try {
+    fileBytes = file.getBytes();
+} catch (IOException e) {
+    log.error("Failed to read prescription file bytes", e);
+    throw new BadRequestException(
+            "Failed to read uploaded prescription file."
+    );
+}
+
+// Run Gemini OCR only
+OcrExtractionResult extractionResult =
+        geminiOcrExtractor.extractText(
+                fileBytes,
+                file.getContentType()
+        );
 
         // 3. Match medicines from extracted text
         MedicineMatcherService.MedicineMatchResult matchResult =
@@ -111,6 +120,8 @@ public class PrescriptionOcrServiceImpl implements PrescriptionOcrService {
                 .rawExtractedText(savedRecord.getRawExtractedText())
                 .detectedMedicineNames(matchResult.detectedNames())
                 .matchedMedicines(matchResult.matchedMedicines())
+                .unmatchedMedicineNames(matchResult.unmatchedNames())
+                .statusMessage(matchResult.statusMessage())
                 .ocrProvider(savedRecord.getOcrProvider())
                 .fallbackMode(extractionResult.isFallback())
                 .fallbackNotice(extractionResult.isFallback() ? extractionResult.getMessage() : null)
@@ -148,6 +159,8 @@ public class PrescriptionOcrServiceImpl implements PrescriptionOcrService {
                 .rawExtractedText(record.getRawExtractedText())
                 .detectedMedicineNames(detectedNames.isEmpty() ? matchResult.detectedNames() : detectedNames)
                 .matchedMedicines(matchResult.matchedMedicines())
+                .unmatchedMedicineNames(matchResult.unmatchedNames())
+                .statusMessage(matchResult.statusMessage())
                 .ocrProvider(record.getOcrProvider())
                 .fallbackMode(isFallback)
                 .fallbackNotice(isFallback ? "Prescription scanned in manual fallback mode." : null)
@@ -155,14 +168,6 @@ public class PrescriptionOcrServiceImpl implements PrescriptionOcrService {
                 .createdAt(record.getCreatedAt())
                 .build();
     }
-
-    private OcrTextExtractor selectExtractor() {
-        if (googleVisionOcrExtractor.isAvailable()) {
-            return googleVisionOcrExtractor;
-        }
-        return fallbackOcrExtractor;
-    }
-
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("Please select a prescription image file to upload.");

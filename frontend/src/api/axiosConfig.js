@@ -10,13 +10,20 @@ const apiClient = axios.create({
   timeout: 15000,
 });
 
-// --- Request interceptor: attach JWT access token ---
+// --- Request interceptor: attach JWT access token & handle multipart ---
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorageSafe.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // When uploading FormData (e.g. prescription images), remove any preset Content-Type
+    // so the browser / HTTP client generates the multipart boundary automatically
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

@@ -96,5 +96,23 @@ class MedicineMatcherServiceTest {
 
         assertThat(result.detectedNames()).isEmpty();
         assertThat(result.matchedMedicines()).isEmpty();
+        assertThat(result.unmatchedNames()).isEmpty();
+        assertThat(result.statusMessage()).contains("could not be read");
+    }
+
+    @Test
+    void matchMedicinesFromText_withUnmatchedMedicines_shouldIdentifyUnmatched() {
+        when(medicineRepository.findAll()).thenReturn(List.of(paracetamol));
+        when(medicineStockRepository.findByMedicineId(1L)).thenReturn(List.of());
+
+        String prescriptionText = "Dr. Clinic\nRx:\n1. Paracetamol 500mg\n2. Lipitor 20mg 1 tab OD";
+
+        MedicineMatcherService.MedicineMatchResult result =
+                medicineMatcherService.matchMedicinesFromText(prescriptionText);
+
+        assertThat(result.detectedNames()).contains("Paracetamol 500mg");
+        assertThat(result.matchedMedicines()).hasSize(1);
+        assertThat(result.unmatchedNames()).contains("Lipitor 20mg");
+        assertThat(result.statusMessage()).isEqualTo("Some extracted medicines could not be matched with our inventory.");
     }
 }

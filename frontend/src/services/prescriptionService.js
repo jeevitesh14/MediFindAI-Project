@@ -7,14 +7,18 @@ export const prescriptionService = {
    * @param {Function} [onUploadProgress]
    * @returns {Promise<Object>} PrescriptionScanResponse
    */
+
   async scanPrescription(file, onUploadProgress) {
     const formData = new FormData();
     formData.append('file', file);
 
     const response = await apiClient.post('/prescriptions/scan', formData, {
+      timeout: 120000,
       onUploadProgress: (progressEvent) => {
         if (onUploadProgress && progressEvent.total) {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
           onUploadProgress(percentCompleted);
         }
       },
@@ -22,6 +26,7 @@ export const prescriptionService = {
 
     return response.data?.data;
   },
+
 
   /**
    * Retrieves the current user's prescription scans history.

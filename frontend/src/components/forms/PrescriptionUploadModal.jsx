@@ -154,12 +154,33 @@ export default function PrescriptionUploadModal({
       });
 
       setScanResult(data);
-      toast.success('Prescription analyzed successfully!');
+      if (data?.statusMessage) {
+        toast.info(data.statusMessage);
+      } else {
+        toast.success('Prescription analyzed successfully!');
+      }
     } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        'Failed to scan prescription. Please try again with a clearer image.';
+      console.error('Prescription extraction failed:', err);
+      const status = err.response?.status;
+      let msg = err.response?.data?.message || err.message;
+
+      // Map generic or missing errors to specific user-friendly messages
+      if (!msg || msg === 'An unexpected error occurred') {
+        if (status === 413) {
+          msg = 'File is too large. Please upload an image under 5 MB.';
+        } else if (status === 415) {
+          msg = 'Unsupported file format. Please upload a JPG, PNG, or WEBP prescription image.';
+        } else if (status === 400) {
+          msg = 'Invalid prescription upload. Please select a valid JPG, PNG, or WEBP file.';
+        } else if (status === 401) {
+          msg = 'Your session has expired. Please log in again to upload prescriptions.';
+        } else if (status === 503) {
+          msg = 'Prescription extraction is temporarily unavailable. Please try again.';
+        } else {
+          msg = 'The prescription image could not be read. Please upload a clearer image or search medicines manually.';
+        }
+      }
+
       setErrorMessage(msg);
       toast.error(msg);
     } finally {
@@ -495,6 +516,29 @@ export default function PrescriptionUploadModal({
                   </div>
                 )}
               </div>
+
+              {/* Unmatched Medicines Section */}
+              {scanResult.unmatchedMedicineNames && scanResult.unmatchedMedicineNames.length > 0 && (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-950/30 p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+                    <FiAlertCircle size={15} />
+                    <span>Prescribed medicines not in catalog ({scanResult.unmatchedMedicineNames.length})</span>
+                  </div>
+                  <p className="text-[11px] text-amber-100/80 leading-relaxed">
+                    Some extracted medicines could not be matched with our inventory. You can search for alternative brand names in the medicine search bar:
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {scanResult.unmatchedMedicineNames.map((name, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/30 bg-amber-900/40 px-2.5 py-1 text-xs text-amber-200"
+                      >
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Raw Extracted Text Drawer (Collapsible) */}
               <div className="rounded-2xl border border-white/15 bg-slate-900/60 overflow-hidden">

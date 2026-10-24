@@ -63,15 +63,76 @@ public class AdminController {
 
     // --- Pharmacy Management & Verification ---
 
+    @PostMapping("/pharmacies")
+    public ResponseEntity<ApiResponse<AdminPharmacyDto>> createPharmacy(
+            @Valid @RequestBody CreatePharmacyAdminRequest request) {
+        AdminPharmacyDto created = adminService.createPharmacy(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Pharmacy registered successfully.", created));
+    }
+
     @GetMapping("/pharmacies")
     public ApiResponse<List<AdminPharmacyDto>> getPharmacies(
             @RequestParam(required = false) Pharmacy.VerificationStatus status,
+            @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 100)), Sort.by("id").descending());
-        Page<AdminPharmacyDto> pharmacies = adminService.getPharmacies(status, search, pageable);
+        Page<AdminPharmacyDto> pharmacies = adminService.getPharmacies(status, active, search, pageable);
         return ApiResponse.success(pharmacies.getContent());
+    }
+
+    @GetMapping("/pharmacies/{id}")
+    public ApiResponse<AdminPharmacyDetailsDto> getPharmacyDetails(@PathVariable Long id) {
+        AdminPharmacyDetailsDto details = adminService.getPharmacyDetails(id);
+        return ApiResponse.success(details);
+    }
+
+    @PutMapping("/pharmacies/{id}")
+    public ApiResponse<AdminPharmacyDto> updatePharmacy(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdatePharmacyAdminRequest request) {
+        AdminPharmacyDto updated = adminService.updatePharmacy(id, request);
+        return ApiResponse.success("Pharmacy updated successfully.", updated);
+    }
+
+    @PatchMapping("/pharmacies/{id}/status")
+    public ApiResponse<AdminPharmacyDto> togglePharmacyActive(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, Boolean> body,
+            @RequestParam(required = false) Boolean active) {
+        boolean isActive = true;
+        if (body != null && body.containsKey("active")) {
+            isActive = Boolean.TRUE.equals(body.get("active"));
+        } else if (active != null) {
+            isActive = active;
+        }
+        AdminPharmacyDto updated = adminService.togglePharmacyActive(id, isActive);
+        String msg = isActive ? "Pharmacy activated successfully." : "Pharmacy deactivated successfully.";
+        return ApiResponse.success(msg, updated);
+    }
+
+    public ApiResponse<AdminPharmacyDto> togglePharmacyActive(Long id, Map<String, Boolean> body) {
+        return togglePharmacyActive(id, body, null);
+    }
+
+    @PatchMapping("/pharmacies/{id}/owner")
+    public ApiResponse<AdminPharmacyDto> assignPharmacyOwner(
+            @PathVariable Long id,
+            @Valid @RequestBody AssignPharmacyOwnerRequest request) {
+        AdminPharmacyDto updated = adminService.assignPharmacyOwner(id, request.getOwnerId());
+        return ApiResponse.success("Pharmacy owner assigned successfully.", updated);
+    }
+
+    @GetMapping("/pharmacies/{id}/inventory")
+    public ApiResponse<List<com.medifindai.dto.pharmacyowner.PharmacyInventoryItemDto>> getPharmacyInventory(
+            @PathVariable Long id,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) com.medifindai.entity.MedicineStock.StockStatus status) {
+        List<com.medifindai.dto.pharmacyowner.PharmacyInventoryItemDto> items =
+                adminService.getPharmacyInventory(id, search, status);
+        return ApiResponse.success(items);
     }
 
     @PatchMapping("/pharmacies/{id}/verify")

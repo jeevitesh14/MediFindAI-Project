@@ -22,7 +22,7 @@ public class FallbackOcrExtractor implements OcrTextExtractor {
                 .provider(getProviderName())
                 .success(true)
                 .fallback(true)
-                .message("No external OCR provider (e.g. Google Cloud Vision) is configured on this server. Please enter the medicine names manually in the search bar below.")
+                .message("Prescription extraction is not configured. Please contact the administrator or set GOOGLE_VISION_API_KEY in the environment.")
                 .build();
     }
 }

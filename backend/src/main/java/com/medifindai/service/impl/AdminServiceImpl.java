@@ -46,9 +46,16 @@ public class AdminServiceImpl implements AdminService {
         long admins = userRepository.countByRole(Role.ADMIN);
 
         long totalPharmacies = pharmacyRepository.count();
+        long activePharmacies = pharmacyRepository.countByActiveTrue();
+        long inactivePharmacies = pharmacyRepository.countByActiveFalse();
         long pendingPharmacies = pharmacyRepository.countByVerificationStatus(Pharmacy.VerificationStatus.PENDING);
         long verifiedPharmacies = pharmacyRepository.countByVerificationStatus(Pharmacy.VerificationStatus.VERIFIED);
         long rejectedPharmacies = pharmacyRepository.countByVerificationStatus(Pharmacy.VerificationStatus.REJECTED);
+
+        List<AdminPharmacyDto> recentlyAddedPharmacies = pharmacyRepository.findTop5ByOrderByCreatedAtDesc()
+                .stream()
+                .map(this::toPharmacyDto)
+                .toList();
 
         long totalMedicines = medicineRepository.count();
         long totalInventoryItems = stockRepository.count();
@@ -75,9 +82,12 @@ public class AdminServiceImpl implements AdminService {
                 .totalPharmacyOwners(pharmacyOwners)
                 .totalAdmins(admins)
                 .totalPharmacies(totalPharmacies)
+                .activePharmacies(activePharmacies)
+                .inactivePharmacies(inactivePharmacies)
                 .pendingPharmacies(pendingPharmacies)
                 .verifiedPharmacies(verifiedPharmacies)
                 .rejectedPharmacies(rejectedPharmacies)
+                .recentlyAddedPharmacies(recentlyAddedPharmacies)
                 .totalMedicines(totalMedicines)
                 .totalInventoryItems(totalInventoryItems)
                 .totalReservations(totalReservations)
@@ -120,10 +130,268 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AdminPharmacyDto> getPharmacies(Pharmacy.VerificationStatus status, String search, Pageable pageable) {
+    public Page<AdminPharmacyDto> getPharmacies(Pharmacy.VerificationStatus status, Boolean active, String search, Pageable pageable) {
         String cleanSearch = (search != null && !search.isBlank()) ? search.trim() : null;
-        return pharmacyRepository.searchPharmaciesAdmin(status, cleanSearch, pageable)
+        return pharmacyRepository.searchPharmaciesAdmin(status, active, cleanSearch, pageable)
                 .map(this::toPharmacyDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminPharmacyDto getPharmacyById(Long pharmacyId) {
+        Pharmacy pharmacy = pharmacyRepository.findById(pharmacyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId));
+        return toPharmacyDto(pharmacy);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminPharmacyDetailsDto getPharmacyDetails(Long pharmacyId) {
+        Pharmacy pharmacy = pharmacyRepository.findById(pharmacyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId));
+
+        User owner = pharmacy.getOwner();
+        int totalMedicinesStocked = stockRepository.countByPharmacyId(pharmacyId);
+        int lowStockItems = stockRepository.countByPharmacyIdAndStockStatus(pharmacyId, MedicineStock.StockStatus.LOW_STOCK);
+        int outOfStockItems = stockRepository.countByPharmacyIdAndStockStatus(pharmacyId, MedicineStock.StockStatus.OUT_OF_STOCK);
+
+        int totalReservations = reservationRepository.countByPharmacyId(pharmacyId);
+        int pendingReservations = reservationRepository.countByPharmacyIdAndStatus(pharmacyId, Reservation.Status.PENDING);
+        int completedReservations = reservationRepository.countByPharmacyIdAndStatus(pharmacyId, Reservation.Status.COMPLETED);
+        int cancelledReservations = reservationRepository.countByPharmacyIdAndStatus(pharmacyId, Reservation.Status.CANCELLED);
+
+        List<Order> orders = orderRepository != null ? orderRepository.findByPharmacyIdOrderByCreatedAtDesc(pharmacyId) : List.of();
+        int totalOrders = orders.size();
+        int pendingOrders = (int) orders.stream().filter(o -> o.getStatus() == Order.Status.PENDING).count();
+        int deliveredOrders = (int) orders.stream().filter(o -> o.getStatus() == Order.Status.DELIVERED).count();
+
+        return AdminPharmacyDetailsDto.builder()
+                .id(pharmacy.getId())
+                .name(pharmacy.getName())
+                .licenseNumber(pharmacy.getLicenseNumber())
+                .description(pharmacy.getDescription())
+                .ownerId(owner != null ? owner.getId() : null)
+                .ownerName(owner != null ? owner.getFullName() : null)
+                .ownerEmail(owner != null ? owner.getEmail() : null)
+                .ownerPhone(owner != null ? owner.getPhone() : null)
+                .addressLine(pharmacy.getAddressLine())
+                .city(pharmacy.getCity())
+                .state(pharmacy.getState())
+                .postalCode(pharmacy.getPostalCode())
+                .latitude(pharmacy.getLatitude())
+                .longitude(pharmacy.getLongitude())
+                .phone(pharmacy.getPhone())
+                .email(pharmacy.getEmail())
+                .openingTime(pharmacy.getOpeningTime())
+                .closingTime(pharmacy.getClosingTime())
+                .is24Hours(pharmacy.is24Hours())
+                .verificationStatus(pharmacy.getVerificationStatus() != null ? pharmacy.getVerificationStatus().name() : "PENDING")
+                .active(pharmacy.isActive())
+                .rating(pharmacy.getRating())
+                .logoUrl(pharmacy.getLogoUrl())
+                .totalMedicinesStocked(totalMedicinesStocked)
+                .lowStockItemsCount(lowStockItems)
+                .outOfStockItemsCount(outOfStockItems)
+                .totalReservations(totalReservations)
+                .pendingReservations(pendingReservations)
+                .completedReservations(completedReservations)
+                .cancelledReservations(cancelledReservations)
+                .totalOrders(totalOrders)
+                .pendingOrders(pendingOrders)
+                .deliveredOrders(deliveredOrders)
+                .createdAt(pharmacy.getCreatedAt())
+                .updatedAt(pharmacy.getUpdatedAt())
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public AdminPharmacyDto createPharmacy(CreatePharmacyAdminRequest request) {
+        if (pharmacyRepository.existsByLicenseNumber(request.getLicenseNumber().trim())) {
+            throw new DuplicateResourceException("Pharmacy with license number '" + request.getLicenseNumber().trim() + "' already exists.");
+        }
+
+        User owner = userRepository.findById(request.getOwnerId())
+                .orElseThrow(() -> new ResourceNotFoundException("Owner user not found with id: " + request.getOwnerId()));
+
+        if (owner.getRole() != Role.PHARMACY_OWNER && owner.getRole() != Role.ADMIN) {
+            owner.setRole(Role.PHARMACY_OWNER);
+            userRepository.save(owner);
+            log.info("Elevated user {} role to PHARMACY_OWNER upon pharmacy creation.", owner.getEmail());
+        }
+
+        Pharmacy pharmacy = Pharmacy.builder()
+                .name(request.getName().trim())
+                .licenseNumber(request.getLicenseNumber().trim())
+                .owner(owner)
+                .description(request.getDescription())
+                .addressLine(request.getAddressLine().trim())
+                .city(request.getCity().trim())
+                .state(request.getState().trim())
+                .postalCode(request.getPostalCode() != null ? request.getPostalCode().trim() : null)
+                .latitude(request.getLatitude())
+                .longitude(request.getLongitude())
+                .phone(request.getPhone().trim())
+                .email(request.getEmail() != null ? request.getEmail().trim() : null)
+                .openingTime(request.getOpeningTime() != null ? request.getOpeningTime() : java.time.LocalTime.of(8, 0))
+                .closingTime(request.getClosingTime() != null ? request.getClosingTime() : java.time.LocalTime.of(22, 0))
+                .is24Hours(request.is24Hours())
+                .active(request.isActive())
+                .verificationStatus(request.getVerificationStatus() != null ? request.getVerificationStatus() : Pharmacy.VerificationStatus.VERIFIED)
+                .logoUrl(request.getLogoUrl())
+                .rating(4.5)
+                .build();
+
+        Pharmacy saved = pharmacyRepository.save(pharmacy);
+        log.info("Admin successfully created new pharmacy '{}' (License: {}, ID: {}) assigned to owner '{}'",
+                saved.getName(), saved.getLicenseNumber(), saved.getId(), owner.getEmail());
+
+        if (notificationService != null) {
+            notificationService.createNotification(
+                    owner,
+                    "Pharmacy Registered by Admin",
+                    "Your pharmacy '" + saved.getName() + "' has been successfully registered on MediFindAI by the administrator.",
+                    Notification.Type.SYSTEM,
+                    saved.getId(),
+                    "/pharmacy-owner/profile"
+            );
+        }
+
+        return toPharmacyDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public AdminPharmacyDto updatePharmacy(Long pharmacyId, UpdatePharmacyAdminRequest request) {
+        Pharmacy pharmacy = pharmacyRepository.findById(pharmacyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId));
+
+        if (pharmacyRepository.existsByLicenseNumberAndIdNot(request.getLicenseNumber().trim(), pharmacyId)) {
+            throw new DuplicateResourceException("Another pharmacy already exists with license number: " + request.getLicenseNumber().trim());
+        }
+
+        if (request.getOwnerId() != null && (pharmacy.getOwner() == null || !request.getOwnerId().equals(pharmacy.getOwner().getId()))) {
+            User newOwner = userRepository.findById(request.getOwnerId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Owner user not found with id: " + request.getOwnerId()));
+            if (newOwner.getRole() != Role.PHARMACY_OWNER && newOwner.getRole() != Role.ADMIN) {
+                newOwner.setRole(Role.PHARMACY_OWNER);
+                userRepository.save(newOwner);
+            }
+            pharmacy.setOwner(newOwner);
+        }
+
+        pharmacy.setName(request.getName().trim());
+        pharmacy.setLicenseNumber(request.getLicenseNumber().trim());
+        pharmacy.setDescription(request.getDescription());
+        pharmacy.setAddressLine(request.getAddressLine().trim());
+        pharmacy.setCity(request.getCity().trim());
+        pharmacy.setState(request.getState().trim());
+        pharmacy.setPostalCode(request.getPostalCode() != null ? request.getPostalCode().trim() : null);
+        pharmacy.setLatitude(request.getLatitude());
+        pharmacy.setLongitude(request.getLongitude());
+        pharmacy.setPhone(request.getPhone().trim());
+        pharmacy.setEmail(request.getEmail() != null ? request.getEmail().trim() : null);
+        if (request.getOpeningTime() != null) pharmacy.setOpeningTime(request.getOpeningTime());
+        if (request.getClosingTime() != null) pharmacy.setClosingTime(request.getClosingTime());
+        if (request.getIs24Hours() != null) pharmacy.set24Hours(request.getIs24Hours());
+        if (request.getActive() != null) pharmacy.setActive(request.getActive());
+        if (request.getVerificationStatus() != null) pharmacy.setVerificationStatus(request.getVerificationStatus());
+        if (request.getLogoUrl() != null) pharmacy.setLogoUrl(request.getLogoUrl());
+
+        Pharmacy saved = pharmacyRepository.save(pharmacy);
+        log.info("Admin updated pharmacy '{}' (ID: {})", saved.getName(), saved.getId());
+        return toPharmacyDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public AdminPharmacyDto togglePharmacyActive(Long pharmacyId, boolean active) {
+        Pharmacy pharmacy = pharmacyRepository.findById(pharmacyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId));
+
+        pharmacy.setActive(active);
+        Pharmacy saved = pharmacyRepository.save(pharmacy);
+        log.info("Admin toggled pharmacy '{}' (ID: {}) active state to {}", saved.getName(), saved.getId(), active);
+
+        if (saved.getOwner() != null && notificationService != null) {
+            String msg = active
+                    ? "Your pharmacy '" + saved.getName() + "' has been activated and is now accepting user reservations."
+                    : "Your pharmacy '" + saved.getName() + "' has been temporarily deactivated by system administration.";
+            notificationService.createNotification(
+                    saved.getOwner(),
+                    active ? "Pharmacy Activated" : "Pharmacy Deactivated",
+                    msg,
+                    Notification.Type.SYSTEM,
+                    saved.getId(),
+                    "/pharmacy-owner/profile"
+            );
+        }
+
+        return toPharmacyDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public AdminPharmacyDto assignPharmacyOwner(Long pharmacyId, Long ownerId) {
+        Pharmacy pharmacy = pharmacyRepository.findById(pharmacyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId));
+
+        User newOwner = userRepository.findById(ownerId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + ownerId));
+
+        if (newOwner.getRole() != Role.PHARMACY_OWNER && newOwner.getRole() != Role.ADMIN) {
+            newOwner.setRole(Role.PHARMACY_OWNER);
+            userRepository.save(newOwner);
+            log.info("Promoted user {} to PHARMACY_OWNER for pharmacy ownership", newOwner.getEmail());
+        }
+
+        pharmacy.setOwner(newOwner);
+        Pharmacy saved = pharmacyRepository.save(pharmacy);
+        log.info("Admin assigned pharmacy '{}' ownership to '{}' (ID: {})", saved.getName(), newOwner.getEmail(), newOwner.getId());
+
+        if (notificationService != null) {
+            notificationService.createNotification(
+                    newOwner,
+                    "Pharmacy Ownership Assigned",
+                    "You have been assigned as the owner of pharmacy '" + saved.getName() + "'.",
+                    Notification.Type.SYSTEM,
+                    saved.getId(),
+                    "/pharmacy-owner/profile"
+            );
+        }
+
+        return toPharmacyDto(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.medifindai.dto.pharmacyowner.PharmacyInventoryItemDto> getPharmacyInventory(
+            Long pharmacyId, String search, MedicineStock.StockStatus status) {
+        if (!pharmacyRepository.existsById(pharmacyId)) {
+            throw new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId);
+        }
+
+        List<MedicineStock> stocks = stockRepository.findByPharmacyIdOrderByUpdatedAtDesc(pharmacyId);
+
+        return stocks.stream()
+                .filter(ms -> {
+                    if (status != null && ms.getStockStatus() != status) {
+                        return false;
+                    }
+                    if (search != null && !search.isBlank()) {
+                        String q = search.trim().toLowerCase();
+                        Medicine m = ms.getMedicine();
+                        return m != null && (
+                                (m.getName() != null && m.getName().toLowerCase().contains(q)) ||
+                                (m.getGenericName() != null && m.getGenericName().toLowerCase().contains(q)) ||
+                                (m.getManufacturer() != null && m.getManufacturer().toLowerCase().contains(q)) ||
+                                (m.getCategory() != null && m.getCategory().getName().toLowerCase().contains(q))
+                        );
+                    }
+                    return true;
+                })
+                .map(this::toInventoryDto)
+                .toList();
     }
 
     @Override
@@ -357,8 +625,32 @@ public class AdminServiceImpl implements AdminService {
                 .verificationStatus(p.getVerificationStatus() != null ? p.getVerificationStatus().name() : "PENDING")
                 .active(p.isActive())
                 .rating(p.getRating())
+                .logoUrl(p.getLogoUrl())
                 .totalMedicinesStocked(stocks)
                 .createdAt(p.getCreatedAt())
+                .updatedAt(p.getUpdatedAt())
+                .build();
+    }
+
+    private com.medifindai.dto.pharmacyowner.PharmacyInventoryItemDto toInventoryDto(MedicineStock ms) {
+        Medicine m = ms.getMedicine();
+        return com.medifindai.dto.pharmacyowner.PharmacyInventoryItemDto.builder()
+                .id(ms.getId())
+                .medicineId(m != null ? m.getId() : null)
+                .medicineName(m != null ? m.getName() : "Unknown")
+                .genericName(m != null ? m.getGenericName() : null)
+                .manufacturer(m != null ? m.getManufacturer() : null)
+                .category(m != null && m.getCategory() != null ? m.getCategory().getName() : null)
+                .dosageForm(m != null ? m.getDosageForm() : null)
+                .strength(m != null ? m.getStrength() : null)
+                .requiresPrescription(m != null && m.isRequiresPrescription())
+                .imageUrl(m != null ? m.getImageUrl() : null)
+                .quantity(ms.getQuantity())
+                .price(ms.getPrice())
+                .stockStatus(ms.getStockStatus() != null ? ms.getStockStatus().name() : null)
+                .lowStockThreshold(ms.getLowStockThreshold())
+                .lastRestockedAt(ms.getLastRestockedAt())
+                .updatedAt(ms.getUpdatedAt())
                 .build();
     }
 

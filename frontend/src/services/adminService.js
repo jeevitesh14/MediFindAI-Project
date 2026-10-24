@@ -21,6 +21,41 @@ export const adminService = {
     return res.data?.data || [];
   },
 
+  async getPharmacyDetails(pharmacyId) {
+    const res = await apiClient.get(`/admin/pharmacies/${pharmacyId}`);
+    return res.data?.data;
+  },
+
+  async createPharmacy(data) {
+    const res = await apiClient.post('/admin/pharmacies', data);
+    return res.data?.data;
+  },
+
+  async updatePharmacy(pharmacyId, data) {
+    const res = await apiClient.put(`/admin/pharmacies/${pharmacyId}`, data);
+    return res.data?.data;
+  },
+
+  async togglePharmacyActive(pharmacyId, active) {
+    const res = await apiClient.patch(`/admin/pharmacies/${pharmacyId}/status`, { active });
+    return res.data?.data;
+  },
+
+  async assignPharmacyOwner(pharmacyId, ownerId) {
+    const res = await apiClient.patch(`/admin/pharmacies/${pharmacyId}/owner`, { ownerId });
+    return res.data?.data;
+  },
+
+  async getPharmacyInventory(pharmacyId, params = {}) {
+    const res = await apiClient.get(`/admin/pharmacies/${pharmacyId}/inventory`, { params });
+    return res.data?.data || [];
+  },
+
+  async getPharmacyOwners() {
+    const res = await apiClient.get('/admin/users', { params: { role: 'PHARMACY_OWNER', size: 100 } });
+    return res.data?.data || [];
+  },
+
   async verifyPharmacy(pharmacyId, data) {
     const res = await apiClient.patch(`/admin/pharmacies/${pharmacyId}/verify`, data);
     return res.data?.data;
