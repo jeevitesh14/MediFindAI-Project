@@ -80,7 +80,7 @@ CREATE TABLE otp_verifications (
 -- ============================================================
 CREATE TABLE pharmacies (
     id                   BIGINT AUTO_INCREMENT PRIMARY KEY,
-    owner_id             BIGINT NOT NULL,
+    owner_id             BIGINT,
     name                 VARCHAR(150) NOT NULL,
     license_number       VARCHAR(100) NOT NULL,
     description          TEXT,

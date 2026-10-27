@@ -97,6 +97,38 @@ class AdminControllerTest {
     }
 
     @Test
+    void createPharmacy_withoutOwner_success() {
+        com.medifindai.dto.admin.CreatePharmacyAdminRequest req = com.medifindai.dto.admin.CreatePharmacyAdminRequest.builder()
+                .name("Apollo Express")
+                .licenseNumber("LIC-67890")
+                .ownerId(null)
+                .addressLine("Road 2")
+                .city("Hyderabad")
+                .state("Telangana")
+                .phone("9876543210")
+                .latitude(17.3850)
+                .longitude(78.4867)
+                .build();
+
+        com.medifindai.dto.admin.AdminPharmacyDto created = com.medifindai.dto.admin.AdminPharmacyDto.builder()
+                .id(2L)
+                .name("Apollo Express")
+                .licenseNumber("LIC-67890")
+                .ownerId(null)
+                .active(true)
+                .build();
+
+        when(adminService.createPharmacy(any())).thenReturn(created);
+
+        org.springframework.http.ResponseEntity<ApiResponse<com.medifindai.dto.admin.AdminPharmacyDto>> response =
+                adminController.createPharmacy(req);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody().getData().getName()).isEqualTo("Apollo Express");
+        assertThat(response.getBody().getData().getOwnerId()).isNull();
+    }
+
+    @Test
     void togglePharmacyActive_success() {
         com.medifindai.dto.admin.AdminPharmacyDto dto = com.medifindai.dto.admin.AdminPharmacyDto.builder()
                 .id(1L)

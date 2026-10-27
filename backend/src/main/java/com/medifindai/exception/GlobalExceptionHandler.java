@@ -99,6 +99,15 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.METHOD_NOT_ALLOWED, ex.getMessage(), req, null);
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatus(
+            org.springframework.web.server.ResponseStatusException ex, HttpServletRequest req) {
+        log.warn("Response status exception for path {}: status={}, reason={}",
+                req.getRequestURI(), ex.getStatusCode(), ex.getReason());
+        String reason = ex.getReason() != null ? ex.getReason() : ex.getMessage();
+        return build(HttpStatus.valueOf(ex.getStatusCode().value()), reason, req, null);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex, HttpServletRequest req) {
         log.error("Unhandled exception", ex);

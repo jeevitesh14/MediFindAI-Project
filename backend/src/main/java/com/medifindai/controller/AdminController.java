@@ -18,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import com.medifindai.dto.pharmacyowner.*;
 import java.util.List;
 import java.util.Map;
 
@@ -126,12 +127,65 @@ public class AdminController {
     }
 
     @GetMapping("/pharmacies/{id}/inventory")
-    public ApiResponse<List<com.medifindai.dto.pharmacyowner.PharmacyInventoryItemDto>> getPharmacyInventory(
+    public ApiResponse<List<PharmacyInventoryItemDto>> getPharmacyInventory(
             @PathVariable Long id,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) com.medifindai.entity.MedicineStock.StockStatus status) {
-        List<com.medifindai.dto.pharmacyowner.PharmacyInventoryItemDto> items =
+        List<PharmacyInventoryItemDto> items =
                 adminService.getPharmacyInventory(id, search, status);
+        return ApiResponse.success(items);
+    }
+
+    @PostMapping("/pharmacies/{id}/inventory")
+    public ResponseEntity<ApiResponse<PharmacyInventoryItemDto>> addPharmacyInventory(
+            @PathVariable Long id,
+            @Valid @RequestBody AddInventoryRequest request) {
+        PharmacyInventoryItemDto item = adminService.addPharmacyInventory(id, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Medicine added to pharmacy inventory successfully.", item));
+    }
+
+    @PutMapping("/pharmacies/{id}/inventory/{stockId}")
+    public ApiResponse<PharmacyInventoryItemDto> updatePharmacyInventory(
+            @PathVariable Long id,
+            @PathVariable Long stockId,
+            @Valid @RequestBody UpdateInventoryRequest request) {
+        PharmacyInventoryItemDto item = adminService.updatePharmacyInventory(id, stockId, request);
+        return ApiResponse.success("Inventory stock and pricing updated successfully.", item);
+    }
+
+    @PatchMapping("/pharmacies/{id}/inventory/{stockId}/stock")
+    public ApiResponse<PharmacyInventoryItemDto> updatePharmacyStockQuantity(
+            @PathVariable Long id,
+            @PathVariable Long stockId,
+            @Valid @RequestBody UpdateStockQuantityRequest request) {
+        PharmacyInventoryItemDto item = adminService.updatePharmacyStockQuantity(id, stockId, request.getQuantity());
+        return ApiResponse.success("Stock quantity updated successfully.", item);
+    }
+
+    @PatchMapping("/pharmacies/{id}/inventory/{stockId}/price")
+    public ApiResponse<PharmacyInventoryItemDto> updatePharmacyStockPrice(
+            @PathVariable Long id,
+            @PathVariable Long stockId,
+            @Valid @RequestBody UpdateStockPriceRequest request) {
+        PharmacyInventoryItemDto item = adminService.updatePharmacyStockPrice(id, stockId, request.getPrice());
+        return ApiResponse.success("Stock price updated successfully.", item);
+    }
+
+    @DeleteMapping("/pharmacies/{id}/inventory/{stockId}")
+    public ApiResponse<Void> deletePharmacyInventory(
+            @PathVariable Long id,
+            @PathVariable Long stockId) {
+        adminService.deletePharmacyInventory(id, stockId);
+        return ApiResponse.success("Medicine removed from pharmacy inventory successfully.", null);
+    }
+
+    @GetMapping("/pharmacies/{id}/reservations")
+    public ApiResponse<List<PharmacyReservationDto>> getPharmacyReservations(
+            @PathVariable Long id,
+            @RequestParam(required = false) Reservation.Status status,
+            @RequestParam(required = false) String search) {
+        List<PharmacyReservationDto> items = adminService.getPharmacyReservations(id, status, search);
         return ApiResponse.success(items);
     }
 

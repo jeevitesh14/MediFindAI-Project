@@ -26,7 +26,6 @@ public class UpdatePharmacyAdminRequest {
     @Size(min = 3, max = 100, message = "License number must be between 3 and 100 characters")
     private String licenseNumber;
 
-    @NotNull(message = "Pharmacy owner must be assigned")
     private Long ownerId;
 
     @Size(max = 1000, message = "Description must not exceed 1000 characters")

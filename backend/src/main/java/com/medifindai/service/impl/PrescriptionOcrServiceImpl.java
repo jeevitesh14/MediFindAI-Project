@@ -70,23 +70,24 @@ public class PrescriptionOcrServiceImpl implements PrescriptionOcrService {
         // 1. Save uploaded file securely
         String storedFilePath = saveFileLocally(file);
 
-        // 2. Select appropriate OCR extractor
-        OcrTextExtractor extractor = geminiOcrExtractor;
-        // Read uploaded image
-byte[] fileBytes;
+        // 2. Read uploaded image bytes
+        byte[] fileBytes;
+        try {
+            fileBytes = file.getBytes();
+        } catch (IOException e) {
+            log.error("Failed to read prescription file bytes", e);
+            throw new BadRequestException("Failed to read uploaded prescription file.");
+        }
 
-try {
-    fileBytes = file.getBytes();
-} catch (IOException e) {
-    log.error("Failed to read prescription file bytes", e);
-    throw new BadRequestException(
-            "Failed to read uploaded prescription file."
-    );
-}
+        // 3. Verify OCR provider configuration & execute extraction
+        if (!geminiOcrExtractor.isAvailable()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
+                    "The prescription OCR service is not configured. Please check the server configuration."
+            );
+        }
 
-// Run Gemini OCR only
-OcrExtractionResult extractionResult =
-        geminiOcrExtractor.extractText(
+        OcrExtractionResult extractionResult = geminiOcrExtractor.extractText(
                 fileBytes,
                 file.getContentType()
         );

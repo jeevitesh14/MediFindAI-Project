@@ -16,7 +16,7 @@ import java.util.*;
 @Component
 public class GeminiAiProvider implements AiProvider {
 
-    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
 
     private final String apiKey;
     private final RestTemplate restTemplate;

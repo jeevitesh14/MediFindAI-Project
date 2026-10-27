@@ -16,6 +16,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.medifindai.dto.pharmacyowner.AddInventoryRequest;
+import com.medifindai.dto.pharmacyowner.PharmacyInventoryItemDto;
+import com.medifindai.dto.pharmacyowner.PharmacyReservationDto;
+import com.medifindai.dto.pharmacyowner.UpdateInventoryRequest;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 
@@ -211,13 +218,16 @@ public class AdminServiceImpl implements AdminService {
             throw new DuplicateResourceException("Pharmacy with license number '" + request.getLicenseNumber().trim() + "' already exists.");
         }
 
-        User owner = userRepository.findById(request.getOwnerId())
-                .orElseThrow(() -> new ResourceNotFoundException("Owner user not found with id: " + request.getOwnerId()));
+        User owner = null;
+        if (request.getOwnerId() != null) {
+            owner = userRepository.findById(request.getOwnerId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Owner user not found with id: " + request.getOwnerId()));
 
-        if (owner.getRole() != Role.PHARMACY_OWNER && owner.getRole() != Role.ADMIN) {
-            owner.setRole(Role.PHARMACY_OWNER);
-            userRepository.save(owner);
-            log.info("Elevated user {} role to PHARMACY_OWNER upon pharmacy creation.", owner.getEmail());
+            if (owner.getRole() != Role.PHARMACY_OWNER && owner.getRole() != Role.ADMIN) {
+                owner.setRole(Role.PHARMACY_OWNER);
+                userRepository.save(owner);
+                log.info("Elevated user {} role to PHARMACY_OWNER upon pharmacy creation.", owner.getEmail());
+            }
         }
 
         Pharmacy pharmacy = Pharmacy.builder()
@@ -244,9 +254,9 @@ public class AdminServiceImpl implements AdminService {
 
         Pharmacy saved = pharmacyRepository.save(pharmacy);
         log.info("Admin successfully created new pharmacy '{}' (License: {}, ID: {}) assigned to owner '{}'",
-                saved.getName(), saved.getLicenseNumber(), saved.getId(), owner.getEmail());
+                saved.getName(), saved.getLicenseNumber(), saved.getId(), owner != null ? owner.getEmail() : "unassigned");
 
-        if (notificationService != null) {
+        if (notificationService != null && owner != null) {
             notificationService.createNotification(
                     owner,
                     "Pharmacy Registered by Admin",
@@ -391,6 +401,171 @@ public class AdminServiceImpl implements AdminService {
                     return true;
                 })
                 .map(this::toInventoryDto)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public PharmacyInventoryItemDto addPharmacyInventory(Long pharmacyId, AddInventoryRequest request) {
+        Pharmacy pharmacy = pharmacyRepository.findById(pharmacyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId));
+
+        if (request.getQuantity() == null || request.getQuantity() < 0) {
+            throw new BadRequestException("Quantity cannot be negative.");
+        }
+        if (request.getPrice() == null || request.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("Price must be greater than zero.");
+        }
+
+        Medicine medicine = medicineRepository.findById(request.getMedicineId())
+                .orElseThrow(() -> new ResourceNotFoundException("Medicine not found with id: " + request.getMedicineId()));
+
+        if (stockRepository.existsByPharmacyIdAndMedicineId(pharmacy.getId(), medicine.getId())) {
+            throw new DuplicateResourceException(
+                    "Medicine '" + medicine.getName() + "' is already in this pharmacy's inventory. Please update the existing stock instead."
+            );
+        }
+
+        int threshold = (request.getLowStockThreshold() != null && request.getLowStockThreshold() >= 1)
+                ? request.getLowStockThreshold()
+                : 10;
+
+        MedicineStock stock = MedicineStock.builder()
+                .pharmacy(pharmacy)
+                .medicine(medicine)
+                .quantity(request.getQuantity())
+                .price(request.getPrice())
+                .lowStockThreshold(threshold)
+                .lastRestockedAt(request.getQuantity() > 0 ? LocalDateTime.now() : null)
+                .build();
+
+        stock.recalculateStatus();
+        MedicineStock savedStock = stockRepository.save(stock);
+
+        log.info("Admin added medicine {} (Qty: {}, Price: ₹{}) to pharmacy {}",
+                medicine.getName(), request.getQuantity(), request.getPrice(), pharmacy.getName());
+
+        return toInventoryDto(savedStock);
+    }
+
+    @Override
+    @Transactional
+    public PharmacyInventoryItemDto updatePharmacyInventory(Long pharmacyId, Long stockId, UpdateInventoryRequest request) {
+        Pharmacy pharmacy = pharmacyRepository.findById(pharmacyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId));
+
+        if (request.getQuantity() == null || request.getQuantity() < 0) {
+            throw new BadRequestException("Quantity cannot be negative.");
+        }
+        if (request.getPrice() == null || request.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("Price must be greater than zero.");
+        }
+
+        MedicineStock stock = stockRepository.findByIdAndPharmacyId(stockId, pharmacy.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Inventory item not found with id: " + stockId + " for pharmacy: " + pharmacyId));
+
+        if (request.getQuantity() > stock.getQuantity()) {
+            stock.setLastRestockedAt(LocalDateTime.now());
+        }
+
+        stock.setQuantity(request.getQuantity());
+        stock.setPrice(request.getPrice());
+        if (request.getLowStockThreshold() != null && request.getLowStockThreshold() >= 1) {
+            stock.setLowStockThreshold(request.getLowStockThreshold());
+        }
+
+        stock.recalculateStatus();
+        MedicineStock saved = stockRepository.save(stock);
+
+        log.info("Admin updated inventory item {} for pharmacy {} (Qty: {}, Price: ₹{})",
+                stockId, pharmacy.getName(), request.getQuantity(), request.getPrice());
+
+        return toInventoryDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public PharmacyInventoryItemDto updatePharmacyStockQuantity(Long pharmacyId, Long stockId, Integer quantity) {
+        if (quantity == null || quantity < 0) {
+            throw new BadRequestException("Quantity cannot be negative.");
+        }
+
+        Pharmacy pharmacy = pharmacyRepository.findById(pharmacyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId));
+
+        MedicineStock stock = stockRepository.findByIdAndPharmacyId(stockId, pharmacy.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Inventory item not found with id: " + stockId + " for pharmacy: " + pharmacyId));
+
+        if (quantity > stock.getQuantity()) {
+            stock.setLastRestockedAt(LocalDateTime.now());
+        }
+
+        stock.setQuantity(quantity);
+        stock.recalculateStatus();
+        MedicineStock saved = stockRepository.save(stock);
+        log.info("Admin updated stock quantity for item {} (Pharmacy: {}, New Qty: {})", stockId, pharmacy.getName(), quantity);
+        return toInventoryDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public PharmacyInventoryItemDto updatePharmacyStockPrice(Long pharmacyId, Long stockId, BigDecimal price) {
+        if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("Price must be greater than zero.");
+        }
+
+        Pharmacy pharmacy = pharmacyRepository.findById(pharmacyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId));
+
+        MedicineStock stock = stockRepository.findByIdAndPharmacyId(stockId, pharmacy.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Inventory item not found with id: " + stockId + " for pharmacy: " + pharmacyId));
+
+        stock.setPrice(price);
+        MedicineStock saved = stockRepository.save(stock);
+        log.info("Admin updated stock price for item {} (Pharmacy: {}, New Price: ₹{})", stockId, pharmacy.getName(), price);
+        return toInventoryDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public void deletePharmacyInventory(Long pharmacyId, Long stockId) {
+        Pharmacy pharmacy = pharmacyRepository.findById(pharmacyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId));
+
+        MedicineStock stock = stockRepository.findByIdAndPharmacyId(stockId, pharmacy.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Inventory item not found with id: " + stockId + " for pharmacy: " + pharmacyId));
+
+        stockRepository.delete(stock);
+        log.info("Admin removed medicine {} from pharmacy {} inventory (Stock ID: {})",
+                stock.getMedicine().getName(), pharmacy.getName(), stockId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PharmacyReservationDto> getPharmacyReservations(Long pharmacyId, Reservation.Status status, String search) {
+        if (!pharmacyRepository.existsById(pharmacyId)) {
+            throw new ResourceNotFoundException("Pharmacy not found with id: " + pharmacyId);
+        }
+
+        List<Reservation> list = (status != null)
+                ? reservationRepository.findByPharmacyIdAndStatusOrderByCreatedAtDesc(pharmacyId, status)
+                : reservationRepository.findByPharmacyIdOrderByCreatedAtDesc(pharmacyId);
+
+        return list.stream()
+                .filter(r -> {
+                    if (search != null && !search.isBlank()) {
+                        String s = search.toLowerCase().trim();
+                        boolean matchCode = r.getReservationCode() != null && r.getReservationCode().toLowerCase().contains(s);
+                        boolean matchMed = r.getMedicine() != null && r.getMedicine().getName() != null && r.getMedicine().getName().toLowerCase().contains(s);
+                        boolean matchUser = r.getUser() != null && (
+                                (r.getUser().getFullName() != null && r.getUser().getFullName().toLowerCase().contains(s)) ||
+                                (r.getUser().getEmail() != null && r.getUser().getEmail().toLowerCase().contains(s))
+                        );
+                        return matchCode || matchMed || matchUser;
+                    }
+                    return true;
+                })
+                .map(this::toPharmacyReservationDto)
                 .toList();
     }
 
@@ -683,6 +858,33 @@ public class AdminServiceImpl implements AdminService {
                 .pharmacyId(p != null ? p.getId() : null)
                 .pharmacyName(p != null ? p.getName() : null)
                 .pharmacyCity(p != null ? p.getCity() : null)
+                .medicineId(m != null ? m.getId() : null)
+                .medicineName(m != null ? m.getName() : null)
+                .genericName(m != null ? m.getGenericName() : null)
+                .strength(m != null ? m.getStrength() : null)
+                .dosageForm(m != null ? m.getDosageForm() : null)
+                .requiresPrescription(m != null && m.isRequiresPrescription())
+                .quantity(r.getQuantity())
+                .unitPrice(r.getUnitPrice())
+                .totalPrice(r.getTotalPrice())
+                .status(r.getStatus() != null ? r.getStatus().name() : "PENDING")
+                .createdAt(r.getCreatedAt())
+                .expiresAt(r.getExpiresAt())
+                .pickedUpAt(r.getPickedUpAt())
+                .cancellationReason(r.getCancellationReason())
+                .build();
+    }
+
+    private PharmacyReservationDto toPharmacyReservationDto(Reservation r) {
+        User u = r.getUser();
+        Medicine m = r.getMedicine();
+
+        return PharmacyReservationDto.builder()
+                .id(r.getId())
+                .reservationCode(r.getReservationCode())
+                .customerId(u != null ? u.getId() : null)
+                .customerName(u != null ? u.getFullName() : null)
+                .customerPhone(u != null ? u.getPhone() : null)
                 .medicineId(m != null ? m.getId() : null)
                 .medicineName(m != null ? m.getName() : null)
                 .genericName(m != null ? m.getGenericName() : null)

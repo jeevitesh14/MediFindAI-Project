@@ -11,8 +11,7 @@ import com.medifindai.exception.ResourceNotFoundException;
 import com.medifindai.repository.PrescriptionOcrRecordRepository;
 import com.medifindai.repository.UserRepository;
 import com.medifindai.service.impl.PrescriptionOcrServiceImpl;
-import com.medifindai.service.ocr.FallbackOcrExtractor;
-import com.medifindai.service.ocr.GoogleVisionOcrExtractor;
+import com.medifindai.service.ocr.GeminiOcrExtractor;
 import com.medifindai.service.ocr.MedicineMatcherService;
 import com.medifindai.service.ocr.OcrExtractionResult;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,10 +46,7 @@ class PrescriptionOcrServiceImplTest {
     private PrescriptionOcrRecordRepository prescriptionOcrRecordRepository;
 
     @Mock
-    private GoogleVisionOcrExtractor googleVisionOcrExtractor;
-
-    @Mock
-    private FallbackOcrExtractor fallbackOcrExtractor;
+    private GeminiOcrExtractor geminiOcrExtractor;
 
     @Mock
     private MedicineMatcherService medicineMatcherService;
@@ -86,31 +82,31 @@ class PrescriptionOcrServiceImplTest {
                 .imageUrl("/uploads/prescriptions/test.jpg")
                 .rawExtractedText("Rx Paracetamol 500mg")
                 .detectedMedicines("[\"Paracetamol 500mg\"]")
-                .ocrProvider("FALLBACK_DEMO")
+                .ocrProvider("GEMINI")
                 .createdAt(LocalDateTime.now())
                 .build();
     }
 
     @Test
-    void scanAndProcess_withValidImage_shouldUseFallbackWhenNoVisionKey() {
+    void scanAndProcess_withValidImage_shouldExtractTextAndMatchMedicines() {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "prescription.png", "image/png", "test-image-data".getBytes()
         );
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(googleVisionOcrExtractor.isAvailable()).thenReturn(false);
-        when(fallbackOcrExtractor.extractText(any(), eq("image/png"))).thenReturn(
+        when(geminiOcrExtractor.isAvailable()).thenReturn(true);
+        when(geminiOcrExtractor.extractText(any(), eq("image/png"))).thenReturn(
                 OcrExtractionResult.builder()
-                        .rawText("")
-                        .provider("FALLBACK_DEMO")
+                        .rawText("Rx Paracetamol 500mg 1 tab OD")
+                        .provider("GEMINI")
                         .success(true)
-                        .fallback(true)
-                        .message("No external OCR provider configured.")
+                        .fallback(false)
+                        .message("Text extracted successfully via Gemini AI.")
                         .build()
         );
 
-        when(medicineMatcherService.matchMedicinesFromText("")).thenReturn(
-                new MedicineMatcherService.MedicineMatchResult(List.of(), List.of())
+        when(medicineMatcherService.matchMedicinesFromText("Rx Paracetamol 500mg 1 tab OD")).thenReturn(
+                new MedicineMatcherService.MedicineMatchResult(List.of("Paracetamol 500mg"), List.of())
         );
 
         when(prescriptionOcrRecordRepository.save(any(PrescriptionOcrRecord.class))).thenAnswer(invocation -> {
@@ -123,9 +119,24 @@ class PrescriptionOcrServiceImplTest {
 
         assertThat(response).isNotNull();
         assertThat(response.getId()).isEqualTo(50L);
-        assertThat(response.isFallbackMode()).isTrue();
-        assertThat(response.getOcrProvider()).isEqualTo("FALLBACK_DEMO");
+        assertThat(response.isFallbackMode()).isFalse();
+        assertThat(response.getOcrProvider()).isEqualTo("GEMINI");
+        assertThat(response.getDetectedMedicineNames()).contains("Paracetamol 500mg");
         assertThat(response.getDisclaimer()).contains("Always verify prescription details");
+    }
+
+    @Test
+    void scanAndProcess_whenGeminiNotConfigured_shouldThrowServiceUnavailable() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "prescription.png", "image/png", "test-image-data".getBytes()
+        );
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(geminiOcrExtractor.isAvailable()).thenReturn(false);
+
+        assertThatThrownBy(() -> prescriptionOcrService.scanAndProcess(1L, file))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("The prescription OCR service is not configured");
     }
 
     @Test

@@ -30,6 +30,11 @@ import {
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import adminService from '../../services/adminService';
+import AddMedicineModal from './pharmacies/AddMedicineModal';
+import EditInventoryModal from './pharmacies/EditInventoryModal';
+import RemoveInventoryModal from './pharmacies/RemoveInventoryModal';
+import PharmacyInventoryTab from './pharmacies/PharmacyInventoryTab';
+import PharmacyReservationsTab from './pharmacies/PharmacyReservationsTab';
 
 const STATUS_FILTERS = [
   { value: '', label: 'All Statuses' },
@@ -98,6 +103,20 @@ export default function AdminPharmacies() {
   const [pharmacyInventory, setPharmacyInventory] = useState([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [inventorySearch, setInventorySearch] = useState('');
+
+  // Inventory sub-modals state
+  const [addMedicineModalOpen, setAddMedicineModalOpen] = useState(false);
+  const [addMedicinePharmacyId, setAddMedicinePharmacyId] = useState(null);
+
+  const [editInventoryModalOpen, setEditInventoryModalOpen] = useState(false);
+  const [editingInventoryItem, setEditingInventoryItem] = useState(null);
+
+  const [removeInventoryModalOpen, setRemoveInventoryModalOpen] = useState(false);
+  const [removingInventoryItem, setRemovingInventoryItem] = useState(null);
+
+  // Pharmacy Reservations state
+  const [pharmacyReservations, setPharmacyReservations] = useState([]);
+  const [loadingReservations, setLoadingReservations] = useState(false);
 
   // Reassign Owner Modal state
   const [ownerModalOpen, setOwnerModalOpen] = useState(false);
@@ -177,14 +196,22 @@ export default function AdminPharmacies() {
     fetchPharmacies();
   };
 
+  // Lock background body scroll when the form modal is open
+  useEffect(() => {
+    if (formModalOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [formModalOpen]);
+
   // --- Open Create Pharmacy Modal ---
   const handleOpenCreateModal = () => {
     setIsEditing(false);
     setEditingPharmacyId(null);
-    setFormData({
-      ...INITIAL_FORM,
-      ownerId: owners.length > 0 ? String(owners[0].id) : '',
-    });
+    setFormData({ ...INITIAL_FORM });
     setFormErrors({});
     setFormModalOpen(true);
   };
@@ -226,7 +253,6 @@ export default function AdminPharmacies() {
     const errs = {};
     if (!formData.name?.trim()) errs.name = 'Pharmacy name is required';
     if (!formData.licenseNumber?.trim()) errs.licenseNumber = 'License / Registration number is required';
-    if (!formData.ownerId) errs.ownerId = 'Pharmacy owner must be assigned';
     if (!formData.phone?.trim()) errs.phone = 'Contact phone number is required';
     if (!formData.addressLine?.trim()) errs.addressLine = 'Address line is required';
     if (!formData.city?.trim()) errs.city = 'City is required';
@@ -247,12 +273,16 @@ export default function AdminPharmacies() {
       setIsSubmitting(true);
       const payload = {
         ...formData,
-        ownerId: Number(formData.ownerId),
         latitude: Number(formData.latitude),
         longitude: Number(formData.longitude),
         openingTime: formData.openingTime ? `${formData.openingTime}:00` : '08:00:00',
         closingTime: formData.closingTime ? `${formData.closingTime}:00` : '22:00:00',
       };
+      if (formData.ownerId) {
+        payload.ownerId = Number(formData.ownerId);
+      } else {
+        delete payload.ownerId;
+      }
 
       if (isEditing && editingPharmacyId) {
         const updated = await adminService.updatePharmacy(editingPharmacyId, payload);
@@ -299,16 +329,56 @@ export default function AdminPharmacies() {
     }
   };
 
+  // --- Live Open/Closed Operating Status Helper ---
+  const getOperatingStatus = (pharmacy) => {
+    if (pharmacy.is24Hours) {
+      return { isOpen: true, label: 'Open 24/7', badgeClass: 'bg-teal-500/15 text-teal-300 border-teal-500/30' };
+    }
+    if (!pharmacy.openingTime || !pharmacy.closingTime) {
+      return { isOpen: true, label: 'Standard Hours', badgeClass: 'bg-slate-700/40 text-slate-300 border-slate-700' };
+    }
+    try {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const [openH, openM] = pharmacy.openingTime.split(':').map(Number);
+      const [closeH, closeM] = pharmacy.closingTime.split(':').map(Number);
+      const openMinutes = openH * 60 + (openM || 0);
+      const closeMinutes = closeH * 60 + (closeM || 0);
+
+      const isOpen =
+        openMinutes <= closeMinutes
+          ? currentMinutes >= openMinutes && currentMinutes <= closeMinutes
+          : currentMinutes >= openMinutes || currentMinutes <= closeMinutes;
+
+      if (isOpen) {
+        return {
+          isOpen: true,
+          label: `Open Now (${pharmacy.openingTime.substring(0, 5)} - ${pharmacy.closingTime.substring(0, 5)})`,
+          badgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+        };
+      } else {
+        return {
+          isOpen: false,
+          label: `Closed (Opens ${pharmacy.openingTime.substring(0, 5)})`,
+          badgeClass: 'bg-rose-500/10 text-rose-300 border-rose-500/25',
+        };
+      }
+    } catch (e) {
+      return { isOpen: true, label: 'Open', badgeClass: 'bg-slate-700/40 text-slate-300 border-slate-700' };
+    }
+  };
+
   // --- Open Details Modal ---
-  const handleOpenDetails = async (pharmacy) => {
+  const handleOpenDetails = async (pharmacy, initialTab = 'overview') => {
     try {
       setLoadingDetails(true);
-      setDetailsTab('overview');
+      setDetailsTab(initialTab);
       setDetailsModalOpen(true);
       const details = await adminService.getPharmacyDetails(pharmacy.id);
       setSelectedPharmacyDetails(details);
-      // Fetch inventory preview
+      // Fetch both inventory and reservations
       fetchPharmacyInventory(pharmacy.id);
+      fetchPharmacyReservations(pharmacy.id);
     } catch (err) {
       console.error('Failed to load pharmacy details', err);
       toast.error('Could not load complete pharmacy details.');
@@ -330,6 +400,92 @@ export default function AdminPharmacies() {
       console.error('Failed to load pharmacy inventory', err);
     } finally {
       setLoadingInventory(false);
+    }
+  };
+
+  // --- Fetch Pharmacy Reservations for Details Tab ---
+  const fetchPharmacyReservations = async (pharmacyId) => {
+    try {
+      setLoadingReservations(true);
+      const items = await adminService.getPharmacyReservations(pharmacyId);
+      setPharmacyReservations(Array.isArray(items) ? items : []);
+    } catch (err) {
+      console.error('Failed to load pharmacy reservations', err);
+    } finally {
+      setLoadingReservations(false);
+    }
+  };
+
+  // --- Inventory Management Action Handlers ---
+  const handleOpenAddMedicineModal = (pharmacyId = null) => {
+    setAddMedicinePharmacyId(pharmacyId || selectedPharmacyDetails?.id || null);
+    setAddMedicineModalOpen(true);
+  };
+
+  const handleOpenEditInventoryModal = (item) => {
+    setEditingInventoryItem(item);
+    setEditInventoryModalOpen(true);
+  };
+
+  const handleOpenRemoveInventoryModal = (item) => {
+    setRemovingInventoryItem(item);
+    setRemoveInventoryModalOpen(true);
+  };
+
+  const handleQuickStockAdjust = async (item, newQuantity) => {
+    if (!selectedPharmacyDetails) return;
+    try {
+      const updated = await adminService.updatePharmacyStockQuantity(
+        selectedPharmacyDetails.id,
+        item.id,
+        newQuantity
+      );
+      setPharmacyInventory((prev) =>
+        prev.map((i) => (i.id === item.id ? updated : i))
+      );
+      toast.success(`Updated stock for '${item.medicineName}' to ${newQuantity} units.`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update stock quantity.');
+    }
+  };
+
+  const handleInventoryAdded = (newItem, pharmacyId) => {
+    if (selectedPharmacyDetails?.id === pharmacyId) {
+      setPharmacyInventory((prev) => [newItem, ...prev.filter((i) => i.id !== newItem.id)]);
+      setSelectedPharmacyDetails((prev) => ({
+        ...prev,
+        totalMedicinesStocked: (prev.totalMedicinesStocked || 0) + 1,
+      }));
+    }
+    setPharmacies((prev) =>
+      prev.map((p) =>
+        p.id === pharmacyId
+          ? { ...p, totalMedicinesStocked: (p.totalMedicinesStocked || 0) + 1 }
+          : p
+      )
+    );
+  };
+
+  const handleInventoryUpdated = (updatedItem) => {
+    setPharmacyInventory((prev) =>
+      prev.map((i) => (i.id === updatedItem.id ? updatedItem : i))
+    );
+  };
+
+  const handleInventoryRemoved = (removedItemId) => {
+    setPharmacyInventory((prev) => prev.filter((i) => i.id !== removedItemId));
+    if (selectedPharmacyDetails) {
+      setSelectedPharmacyDetails((prev) => ({
+        ...prev,
+        totalMedicinesStocked: Math.max(0, (prev.totalMedicinesStocked || 1) - 1),
+      }));
+      setPharmacies((prev) =>
+        prev.map((p) =>
+          p.id === selectedPharmacyDetails.id
+            ? { ...p, totalMedicinesStocked: Math.max(0, (p.totalMedicinesStocked || 1) - 1) }
+            : p
+        )
+      );
     }
   };
 
@@ -484,6 +640,14 @@ export default function AdminPharmacies() {
             >
               <FiRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
               <span>Refresh</span>
+            </button>
+            <button
+              onClick={() => handleOpenAddMedicineModal()}
+              className="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/40 bg-cyan-950/60 px-4 py-3 text-xs font-bold text-cyan-300 backdrop-blur-md hover:bg-cyan-900/60 hover:text-white transition-all shadow-md shadow-cyan-950/40"
+              title="Stock medicine in any registered pharmacy"
+            >
+              <FiPackage size={15} />
+              <span>+ Stock Medicine</span>
             </button>
             <button
               onClick={handleOpenCreateModal}
@@ -641,10 +805,19 @@ export default function AdminPharmacies() {
                         <h2 className="text-lg sm:text-xl font-bold text-white leading-snug">
                           {pharmacy.name}
                         </h2>
-                        {pharmacy.is24Hours && (
+                        {pharmacy.is24Hours ? (
                           <span className="px-2 py-0.5 rounded-md bg-teal-500/15 text-teal-300 text-[10px] font-semibold border border-teal-500/30">
                             24/7 Active
                           </span>
+                        ) : (
+                          (() => {
+                            const op = getOperatingStatus(pharmacy);
+                            return (
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${op.badgeClass}`}>
+                                {op.label}
+                              </span>
+                            );
+                          })()
                         )}
                         <span
                           className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
@@ -716,10 +889,43 @@ export default function AdminPharmacies() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+                    {/* Manage Store Inventory Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDetails(pharmacy, 'inventory')}
+                      className="px-3 py-2 rounded-xl border border-cyan-500/40 bg-cyan-950/40 hover:bg-cyan-900/50 text-cyan-300 text-xs font-bold inline-flex items-center gap-1.5 transition-all shadow-sm"
+                      title="Manage Store Inventory & Stock"
+                    >
+                      <FiPackage size={14} />
+                      <span>Manage Stock</span>
+                    </button>
+
+                    {/* Quick Add Medicine to this store */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAddMedicineModal(pharmacy.id)}
+                      className="p-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-cyan-300 transition-all shadow-sm"
+                      title="Add Medicine to this Pharmacy"
+                      aria-label="Add Medicine to this Pharmacy"
+                    >
+                      <FiPlus size={15} />
+                    </button>
+
+                    {/* View Reservations for this store */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDetails(pharmacy, 'reservations')}
+                      className="p-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-amber-300 transition-all shadow-sm"
+                      title="View Pharmacy Reservations"
+                      aria-label="View Pharmacy Reservations"
+                    >
+                      <FiClock size={15} />
+                    </button>
+
                     {/* View Details Profile */}
                     <button
                       type="button"
-                      onClick={() => handleOpenDetails(pharmacy)}
+                      onClick={() => handleOpenDetails(pharmacy, 'overview')}
                       className="p-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-white transition-all shadow-sm"
                       title="View Pharmacy Profile"
                       aria-label="View Pharmacy Profile"
@@ -813,15 +1019,30 @@ export default function AdminPharmacies() {
                       </td>
                       <td className="px-4 py-4">
                         {pharmacy.is24Hours ? (
-                          <span className="text-teal-400 font-semibold text-xs">24/7 Open</span>
-                        ) : (
-                          <span className="text-slate-400 text-xs">
-                            {pharmacy.openingTime?.substring(0, 5) || '08:00'} - {pharmacy.closingTime?.substring(0, 5) || '22:00'}
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-teal-500/15 text-teal-300 border border-teal-500/30">
+                            24/7 Active
                           </span>
+                        ) : (
+                          (() => {
+                            const op = getOperatingStatus(pharmacy);
+                            return (
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${op.badgeClass}`}>
+                                {op.label}
+                              </span>
+                            );
+                          })()
                         )}
                       </td>
-                      <td className="px-3 py-4 text-center font-bold text-white">
-                        {pharmacy.totalMedicinesStocked || 0}
+                      <td className="px-3 py-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDetails(pharmacy, 'inventory')}
+                          className="px-2.5 py-1 rounded-lg bg-slate-950/80 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-cyan-300 font-bold text-xs inline-flex items-center gap-1 transition-all"
+                          title="Manage Inventory"
+                        >
+                          <FiPackage size={12} />
+                          <span>{pharmacy.totalMedicinesStocked || 0}</span>
+                        </button>
                       </td>
                       <td className="px-3 py-4 text-center">
                         <button
@@ -844,7 +1065,31 @@ export default function AdminPharmacies() {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => handleOpenDetails(pharmacy)}
+                            onClick={() => handleOpenDetails(pharmacy, 'inventory')}
+                            className="p-2 rounded-lg bg-cyan-950/50 hover:bg-cyan-900/60 text-cyan-300 border border-cyan-500/30"
+                            title="Manage Store Stock"
+                          >
+                            <FiPackage size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAddMedicineModal(pharmacy.id)}
+                            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300"
+                            title="Add Medicine to Store"
+                          >
+                            <FiPlus size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDetails(pharmacy, 'reservations')}
+                            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300"
+                            title="View Reservations"
+                          >
+                            <FiClock size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDetails(pharmacy, 'overview')}
                             className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white"
                             title="View Pharmacy Profile"
                           >
@@ -920,9 +1165,10 @@ export default function AdminPharmacies() {
 
       {/* ================= MODAL: Add / Edit Pharmacy Form ================= */}
       {formModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto animate-fade-in">
-          <div className="relative w-full max-w-3xl my-8 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8 shadow-2xl backdrop-blur-2xl text-white space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/85 backdrop-blur-md overflow-hidden animate-fade-in">
+          <div className="relative w-full max-w-3xl max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl backdrop-blur-2xl text-white overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex-shrink-0 px-6 sm:px-8 py-5 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md flex items-center justify-between z-10">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                   <FiShoppingBag size={20} />
@@ -933,7 +1179,7 @@ export default function AdminPharmacies() {
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
                     {isEditing
-                      ? 'Modify partner license, location coordinates, operational hours, and owner.'
+                      ? 'Modify partner license, location coordinates, and operational hours.'
                       : 'Onboard a licensed pharmacy partner into the MediFindAI network.'}
                   </p>
                 </div>
@@ -941,12 +1187,15 @@ export default function AdminPharmacies() {
               <button
                 onClick={() => setFormModalOpen(false)}
                 className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                aria-label="Close modal"
               >
                 <FiX size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="space-y-6 text-xs sm:text-sm">
+            <form onSubmit={handleFormSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Scrollable Form Body */}
+              <div className="flex-1 min-h-0 overflow-y-auto px-6 sm:px-8 py-6 space-y-6 text-xs sm:text-sm">
               {/* Section 1: Core Pharmacy Information */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-400">1. Basic Information</h4>
@@ -983,27 +1232,6 @@ export default function AdminPharmacies() {
                     {formErrors.licenseNumber && <p className="text-[11px] text-rose-400 mt-1">{formErrors.licenseNumber}</p>}
                   </div>
 
-                  {/* Owner Selection */}
-                  <div className="sm:col-span-2">
-                    <label className="block font-semibold text-slate-300 mb-1.5">
-                      Assigned Pharmacy Owner <span className="text-rose-400">*</span>
-                    </label>
-                    <select
-                      value={formData.ownerId}
-                      onChange={(e) => setFormData({ ...formData, ownerId: e.target.value })}
-                      className={`w-full rounded-xl border bg-slate-950/80 px-4 py-2.5 text-white focus:outline-none ${
-                        formErrors.ownerId ? 'border-rose-500 focus:border-rose-400' : 'border-slate-800 focus:border-cyan-400'
-                      }`}
-                    >
-                      <option value="">Select an eligible owner...</option>
-                      {owners.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.fullName} ({o.email}) {o.phone ? `- ${o.phone}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    {formErrors.ownerId && <p className="text-[11px] text-rose-400 mt-1">{formErrors.ownerId}</p>}
-                  </div>
 
                   {/* Description */}
                   <div className="sm:col-span-2">
@@ -1021,7 +1249,7 @@ export default function AdminPharmacies() {
 
               {/* Section 2: Contact & Location */}
               <div className="space-y-3 pt-3 border-t border-slate-800">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-400">2. Contact & Location</h4>
                   <button
                     type="button"
@@ -1171,7 +1399,7 @@ export default function AdminPharmacies() {
                     />
                   </div>
 
-                  <div className="flex items-center gap-3 sm:col-span-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-4 sm:gap-6 sm:col-span-2 pt-1">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -1184,7 +1412,7 @@ export default function AdminPharmacies() {
                       </span>
                     </label>
 
-                    <label className="flex items-center gap-2 cursor-pointer ml-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={formData.active}
@@ -1223,8 +1451,10 @@ export default function AdminPharmacies() {
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+              </div>
+
+              {/* Modal Footer / Action Buttons */}
+              <div className="flex-shrink-0 px-6 sm:px-8 py-4 border-t border-slate-800 bg-slate-900/95 backdrop-blur-md flex items-center justify-end gap-3 z-10">
                 <button
                   type="button"
                   onClick={() => setFormModalOpen(false)}
@@ -1318,6 +1548,17 @@ export default function AdminPharmacies() {
               >
                 <FiPackage size={14} />
                 <span>Stock Catalog ({selectedPharmacyDetails.totalMedicinesStocked || pharmacyInventory.length || 0})</span>
+              </button>
+              <button
+                onClick={() => setDetailsTab('reservations')}
+                className={`px-4 py-2 rounded-xl transition-all inline-flex items-center gap-1.5 ${
+                  detailsTab === 'reservations'
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <FiClock size={14} />
+                <span>Reservations ({pharmacyReservations.length || selectedPharmacyDetails.totalReservations || 0})</span>
               </button>
             </div>
 
@@ -1414,88 +1655,26 @@ export default function AdminPharmacies() {
 
             {/* Tab 2: Medicine Inventory Catalog */}
             {detailsTab === 'inventory' && (
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="relative flex-1">
-                    <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-cyan-400" size={15} />
-                    <input
-                      type="text"
-                      value={inventorySearch}
-                      onChange={(e) => {
-                        setInventorySearch(e.target.value);
-                        fetchPharmacyInventory(selectedPharmacyDetails.id, e.target.value);
-                      }}
-                      placeholder="Search stocked medicines by name, generic molecule, category..."
-                      className="w-full rounded-xl border border-slate-800 bg-slate-950/80 pl-10 pr-4 py-2 text-xs text-white placeholder:text-slate-600 focus:border-cyan-400 focus:outline-none"
-                    />
-                  </div>
-                  <button
-                    onClick={() => fetchPharmacyInventory(selectedPharmacyDetails.id, inventorySearch)}
-                    className="p-2 rounded-xl border border-slate-800 bg-slate-950/80 text-xs text-cyan-300 hover:text-white"
-                  >
-                    <FiRefreshCw size={14} className={loadingInventory ? 'animate-spin' : ''} />
-                  </button>
-                </div>
+              <PharmacyInventoryTab
+                pharmacy={selectedPharmacyDetails}
+                inventory={pharmacyInventory}
+                loading={loadingInventory}
+                onRefresh={() => fetchPharmacyInventory(selectedPharmacyDetails.id)}
+                onOpenAddModal={() => handleOpenAddMedicineModal(selectedPharmacyDetails.id)}
+                onOpenEditModal={handleOpenEditInventoryModal}
+                onOpenRemoveModal={handleOpenRemoveInventoryModal}
+                onQuickStockAdjust={handleQuickStockAdjust}
+              />
+            )}
 
-                {loadingInventory ? (
-                  <div className="py-12 text-center text-slate-400 text-xs">
-                    <FiRefreshCw className="w-6 h-6 animate-spin text-cyan-400 mx-auto mb-2" />
-                    Loading pharmacy stock catalog...
-                  </div>
-                ) : pharmacyInventory.length > 0 ? (
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 overflow-hidden max-h-96 overflow-y-auto">
-                    <table className="w-full text-left text-xs text-slate-300">
-                      <thead className="bg-slate-900 text-[11px] font-bold uppercase tracking-wider text-slate-400 sticky top-0 border-b border-slate-800">
-                        <tr>
-                          <th className="px-4 py-3">Medicine</th>
-                          <th className="px-3 py-3">Category</th>
-                          <th className="px-3 py-3">Form & Strength</th>
-                          <th className="px-3 py-3 text-right">Available Qty</th>
-                          <th className="px-3 py-3 text-right">Price</th>
-                          <th className="px-4 py-3 text-center">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60">
-                        {pharmacyInventory.map((item) => (
-                          <tr key={item.id} className="hover:bg-slate-800/30">
-                            <td className="px-4 py-3">
-                              <span className="font-bold text-white block">{item.medicineName}</span>
-                              <span className="text-[11px] text-slate-500">{item.genericName || item.manufacturer}</span>
-                            </td>
-                            <td className="px-3 py-3 text-slate-300">{item.category || 'General'}</td>
-                            <td className="px-3 py-3 text-slate-300">
-                              {item.dosageForm} {item.strength ? `· ${item.strength}` : ''}
-                            </td>
-                            <td className="px-3 py-3 text-right font-bold text-white">
-                              {item.quantity}
-                            </td>
-                            <td className="px-3 py-3 text-right font-mono text-cyan-300">
-                              ₹{Number(item.price || 0).toFixed(2)}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                  item.stockStatus === 'AVAILABLE'
-                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                                    : item.stockStatus === 'LOW_STOCK'
-                                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                                    : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-                                }`}
-                              >
-                                {item.stockStatus?.replace('_', ' ') || 'AVAILABLE'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="py-10 text-center text-slate-400 text-xs border border-dashed border-slate-800 rounded-2xl">
-                    No medicines stocked in this pharmacy yet.
-                  </div>
-                )}
-              </div>
+            {/* Tab 3: Pharmacy Reservations */}
+            {detailsTab === 'reservations' && (
+              <PharmacyReservationsTab
+                pharmacy={selectedPharmacyDetails}
+                reservations={pharmacyReservations}
+                loading={loadingReservations}
+                onRefresh={() => fetchPharmacyReservations(selectedPharmacyDetails.id)}
+              />
             )}
           </div>
         </div>
@@ -1693,6 +1872,34 @@ export default function AdminPharmacies() {
           </div>
         </div>
       )}
+
+      {/* ================= MODAL: Add Medicine to Pharmacy ================= */}
+      <AddMedicineModal
+        isOpen={addMedicineModalOpen}
+        onClose={() => setAddMedicineModalOpen(false)}
+        pharmacies={pharmacies}
+        defaultPharmacyId={addMedicinePharmacyId}
+        onSuccess={handleInventoryAdded}
+      />
+
+      {/* ================= MODAL: Edit Pharmacy Inventory ================= */}
+      <EditInventoryModal
+        isOpen={editInventoryModalOpen}
+        onClose={() => setEditInventoryModalOpen(false)}
+        pharmacy={selectedPharmacyDetails}
+        item={editingInventoryItem}
+        onSuccess={handleInventoryUpdated}
+      />
+
+      {/* ================= MODAL: Remove Pharmacy Inventory Confirmation ================= */}
+      <RemoveInventoryModal
+        isOpen={removeInventoryModalOpen}
+        onClose={() => setRemoveInventoryModalOpen(false)}
+        pharmacy={selectedPharmacyDetails}
+        item={removingInventoryItem}
+        onSuccess={handleInventoryRemoved}
+        onMarkOutOfStock={handleInventoryUpdated}
+      />
     </div>
   );
 }

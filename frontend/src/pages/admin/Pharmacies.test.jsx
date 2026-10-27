@@ -157,6 +157,87 @@ describe('AdminPharmacies Component', () => {
     expect(screen.getByText('1. Basic Information')).toBeInTheDocument();
     expect(screen.getByText('2. Contact & Location')).toBeInTheDocument();
     expect(screen.getByText('3. Operations & Status')).toBeInTheDocument();
+
+    // Verify owner field is not in the registration form
+    expect(screen.queryByText(/Assigned Pharmacy Owner/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Select an eligible owner/i)).not.toBeInTheDocument();
+
+    // Verify responsive modal sizing and internal scroll structure
+    const modalTitle = screen.getByText('Register New Pharmacy');
+    const header = modalTitle.closest('.flex-shrink-0');
+    expect(header).toBeInTheDocument();
+    expect(header).toHaveClass('flex-shrink-0');
+
+    const modalContainer = header.parentElement;
+    expect(modalContainer).toHaveClass('flex', 'flex-col', 'overflow-hidden');
+    expect(modalContainer.className).toMatch(/max-h-\[calc\(100dvh/);
+
+    const form = modalContainer.querySelector('form');
+    expect(form).toHaveClass('flex', 'flex-col', 'flex-1', 'min-h-0', 'overflow-hidden');
+
+    const scrollableBody = form.querySelector('.overflow-y-auto');
+    expect(scrollableBody).toBeInTheDocument();
+    expect(scrollableBody).toHaveClass('flex-1', 'min-h-0', 'overflow-y-auto');
+
+    const footer = form.querySelector('.border-t.bg-slate-900\\/95');
+    expect(footer).toBeInTheDocument();
+    expect(footer).toHaveClass('flex-shrink-0');
+    expect(footer).toContainElement(screen.getByRole('button', { name: /Cancel/i }));
+    expect(footer).toContainElement(screen.getByRole('button', { name: /Register Pharmacy/i }));
+
+    // Verify body scroll lock is applied
+    expect(document.body.style.overflow).toBe('hidden');
+
+    // Close modal and verify body scroll lock is removed
+    const closeBtn = screen.getByLabelText('Close modal');
+    fireEvent.click(closeBtn);
+    expect(document.body.style.overflow).toBe('');
+  });
+
+  it('submits pharmacy registration without an owner', async () => {
+    adminService.createPharmacy.mockResolvedValue({
+      id: 3,
+      name: 'CarePlus Direct',
+      licenseNumber: 'LIC-CP-999',
+      addressLine: 'Road 1',
+      city: 'Hyderabad',
+      state: 'Telangana',
+      phone: '9999888877',
+      active: true,
+      verificationStatus: 'VERIFIED',
+    });
+
+    render(
+      <BrowserRouter>
+        <AdminPharmacies />
+      </BrowserRouter>
+    );
+
+    const addButtons = screen.getAllByRole('button', { name: /Add New Pharmacy/i });
+    fireEvent.click(addButtons[0]);
+
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Apollo Care Pharmacy/i), {
+      target: { value: 'CarePlus Direct' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. LIC-TS-10023/i), {
+      target: { value: 'LIC-CP-999' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. 9100000001/i), {
+      target: { value: '9999888877' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/Road No\. 12, Banjara Hills/i), {
+      target: { value: 'Road 1' },
+    });
+
+    const submitBtn = screen.getByRole('button', { name: /Register Pharmacy/i });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(adminService.createPharmacy).toHaveBeenCalled();
+      const callArg = adminService.createPharmacy.mock.calls[0][0];
+      expect(callArg.name).toBe('CarePlus Direct');
+      expect(callArg.ownerId).toBeUndefined();
+    });
   });
 
   it('calls togglePharmacyActive when the status toggle button is clicked', async () => {

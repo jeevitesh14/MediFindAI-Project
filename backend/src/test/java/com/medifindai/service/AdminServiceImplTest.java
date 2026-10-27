@@ -159,6 +159,39 @@ class AdminServiceImplTest {
     }
 
     @Test
+    void testCreatePharmacy_WithoutOwner_Success() {
+        CreatePharmacyAdminRequest req = CreatePharmacyAdminRequest.builder()
+                .name("Unassigned Apollo Pharmacy")
+                .licenseNumber("LIC-UNASSIGNED-001")
+                .ownerId(null)
+                .addressLine("Road 5")
+                .city("Hyderabad")
+                .state("Telangana")
+                .postalCode("500001")
+                .latitude(17.3850)
+                .longitude(78.4867)
+                .phone("9876543210")
+                .email("apollo.unassigned@example.com")
+                .active(true)
+                .build();
+
+        when(pharmacyRepository.existsByLicenseNumber("LIC-UNASSIGNED-001")).thenReturn(false);
+        when(pharmacyRepository.save(any(Pharmacy.class))).thenAnswer(i -> {
+            Pharmacy p = i.getArgument(0);
+            p.setId(201L);
+            return p;
+        });
+
+        AdminPharmacyDto created = adminService.createPharmacy(req);
+
+        assertNotNull(created);
+        assertEquals("Unassigned Apollo Pharmacy", created.getName());
+        assertEquals("LIC-UNASSIGNED-001", created.getLicenseNumber());
+        assertNull(created.getOwnerId());
+        assertNull(created.getOwnerName());
+    }
+
+    @Test
     void testCreatePharmacy_DuplicateLicense_ThrowsException() {
         CreatePharmacyAdminRequest req = CreatePharmacyAdminRequest.builder()
                 .name("Duplicate Pharmacy")

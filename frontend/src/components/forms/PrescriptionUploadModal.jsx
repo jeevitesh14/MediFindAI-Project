@@ -174,10 +174,14 @@ export default function PrescriptionUploadModal({
           msg = 'Invalid prescription upload. Please select a valid JPG, PNG, or WEBP file.';
         } else if (status === 401) {
           msg = 'Your session has expired. Please log in again to upload prescriptions.';
+        } else if (status === 429) {
+          msg = 'OCR API request limit exceeded. Please try again in a few moments.';
         } else if (status === 503) {
-          msg = 'Prescription extraction is temporarily unavailable. Please try again.';
+          msg = 'The prescription extraction service is temporarily unavailable. Please try again.';
+        } else if (status === 502 || status === 504) {
+          msg = 'The extraction request timed out or the service is temporarily unreachable. Please try again.';
         } else {
-          msg = 'The prescription image could not be read. Please upload a clearer image or search medicines manually.';
+          msg = 'The prescription image could not be processed. Please upload a clearer image or search medicines manually.';
         }
       }
 
@@ -389,6 +393,22 @@ export default function PrescriptionUploadModal({
           {/* State 2: Scan Results View */}
           {scanResult && (
             <div className="space-y-6">
+              {/* Status Message / Notification Banner */}
+              {scanResult.statusMessage && (
+                <div
+                  className={`rounded-2xl border p-4 text-xs flex items-start gap-3 backdrop-blur-md ${
+                    scanResult.matchedMedicines && scanResult.matchedMedicines.length > 0
+                      ? 'border-cyan-500/30 bg-cyan-950/40 text-cyan-200'
+                      : scanResult.unmatchedMedicineNames && scanResult.unmatchedMedicineNames.length > 0
+                      ? 'border-amber-500/30 bg-amber-950/40 text-amber-200'
+                      : 'border-slate-700 bg-slate-900/80 text-slate-300'
+                  }`}
+                >
+                  <FiAlertCircle size={18} className="shrink-0 mt-0.5" />
+                  <span className="leading-relaxed font-medium">{scanResult.statusMessage}</span>
+                </div>
+              )}
+
               {/* Fallback Notice Banner (if fallback mode) */}
               {scanResult.fallbackMode && (
                 <div className="rounded-2xl border border-amber-500/40 bg-amber-950/40 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-inner">
