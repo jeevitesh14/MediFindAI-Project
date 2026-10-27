@@ -37,13 +37,27 @@ export default function Register() {
     }
   }, [error, dispatch]);
 
+  const normalizePhoneNumber = (phone) => {
+    if (!phone) return '';
+    let clean = phone.replace(/[\s\-()]/g, '');
+    if (clean.startsWith('+91')) {
+      clean = clean.substring(3);
+    } else if (clean.startsWith('91') && clean.length === 12) {
+      clean = clean.substring(2);
+    } else if (clean.startsWith('0') && clean.length === 11) {
+      clean = clean.substring(1);
+    }
+    return clean;
+  };
+
   const onSubmit = (data) => {
     const { confirmPassword: _, ...payload } = data;
+    const normalizedPhone = normalizePhoneNumber(payload.phone);
     dispatch(
       registerUser({
         fullName: payload.fullName?.trim(),
         email: payload.email?.trim(),
-        phone: payload.phone?.trim() || null,
+        phone: normalizedPhone,
         password: payload.password,
         role: accountType,
       })
@@ -114,10 +128,10 @@ export default function Register() {
             error={errors.email}
           />
           <InputField
-            label="Phone Number (Optional)"
+            label="Phone Number *"
             name="phone"
             icon={FiPhone}
-            placeholder="9876543210"
+            placeholder="Enter your 10-digit mobile number"
             register={register}
             error={errors.phone}
           />

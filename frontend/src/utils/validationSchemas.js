@@ -16,8 +16,13 @@ export const registerSchema = yup.object({
   email: yup.string().required('Email is required').email('Enter a valid email'),
   phone: yup
     .string()
-    .matches(/^$|^[0-9]{10}$/, 'Phone must be a 10 digit number')
-    .notRequired(),
+    .transform((val) => (val ? val.trim() : ''))
+    .required('Phone number is required')
+    .test('is-valid-phone', 'Please enter a valid 10-digit mobile number', (val) => {
+      if (!val || !val.trim()) return false;
+      const clean = val.replace(/[\s\-()]/g, '');
+      return /^(\+91|91|0)?[6-9]\d{9}$/.test(clean);
+    }),
   password: passwordRules,
   confirmPassword: yup
     .string()

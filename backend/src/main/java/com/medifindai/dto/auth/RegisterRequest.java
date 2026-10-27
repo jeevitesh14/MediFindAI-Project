@@ -22,7 +22,11 @@ public class RegisterRequest {
     @Email(message = "Email must be valid")
     private String email;
 
-    @Pattern(regexp = "^$|^[0-9]{10}$", message = "Phone must be a 10 digit number")
+    @NotBlank(message = "Phone number is required")
+    @Pattern(
+        regexp = "^(\\+91[\\-\\s]?)?[0-9]{10}$",
+        message = "Phone must be a valid 10-digit mobile number"
+    )
     private String phone;
 
     @NotBlank(message = "Password is required")

@@ -3,8 +3,10 @@ package com.medifindai.service;
 import com.medifindai.dto.auth.RegisterRequest;
 import com.medifindai.entity.Role;
 import com.medifindai.entity.User;
+import com.medifindai.exception.BadRequestException;
 import com.medifindai.exception.DuplicateResourceException;
 import com.medifindai.repository.PasswordResetTokenRepository;
+import com.medifindai.repository.PharmacyRepository;
 import com.medifindai.repository.RefreshTokenRepository;
 import com.medifindai.repository.UserRepository;
 import com.medifindai.security.JwtTokenProvider;
@@ -22,7 +24,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import com.medifindai.repository.PharmacyRepository;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,20 +43,21 @@ class AuthServiceImplTest {
     @InjectMocks
     private AuthServiceImpl authService;
 
-
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(authService, "refreshExpirationMs", 604800000L);
     }
 
     @Test
-    void register_shouldCreateUser_whenEmailNotTaken() {
+    void register_shouldCreateUser_whenEmailAndPhoneValid() {
         RegisterRequest request = new RegisterRequest();
         request.setFullName("Test User");
         request.setEmail("test@example.com");
+        request.setPhone("9876543210");
         request.setPassword("Password@123");
 
         when(userRepository.existsByEmail("test@example.com")).thenReturn(false);
+        when(userRepository.existsByPhone("9876543210")).thenReturn(false);
         when(passwordEncoder.encode("Password@123")).thenReturn("hashed");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User u = invocation.getArgument(0);
@@ -66,6 +70,7 @@ class AuthServiceImplTest {
 
         assertThat(response.getAccessToken()).isEqualTo("access-token");
         assertThat(response.getUser().getEmail()).isEqualTo("test@example.com");
+        assertThat(response.getUser().getPhone()).isEqualTo("9876543210");
         assertThat(response.getUser().getRole()).isEqualTo(Role.USER.name());
         verify(emailService).sendWelcomeEmail("test@example.com", "Test User");
     }
@@ -75,14 +80,109 @@ class AuthServiceImplTest {
         RegisterRequest request = new RegisterRequest();
         request.setFullName("Test User");
         request.setEmail("existing@example.com");
+        request.setPhone("9876543210");
         request.setPassword("Password@123");
 
         when(userRepository.existsByEmail("existing@example.com")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.register(request))
-                .isInstanceOf(DuplicateResourceException.class);
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("email already exists");
 
         verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void register_shouldThrow_whenPhoneIsNull() {
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("Test User");
+        request.setEmail("newuser@example.com");
+        request.setPhone(null);
+        request.setPassword("Password@123");
+
+        when(userRepository.existsByEmail("newuser@example.com")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Phone number is required");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void register_shouldThrow_whenPhoneIsBlank() {
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("Test User");
+        request.setEmail("newuser@example.com");
+        request.setPhone("   ");
+        request.setPassword("Password@123");
+
+        when(userRepository.existsByEmail("newuser@example.com")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Phone number is required");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void register_shouldThrow_whenPhoneIsMalformed() {
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("Test User");
+        request.setEmail("newuser@example.com");
+        request.setPhone("12345");
+        request.setPassword("Password@123");
+
+        when(userRepository.existsByEmail("newuser@example.com")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Phone must be a valid 10-digit mobile number");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void register_shouldThrow_whenPhoneAlreadyExists() {
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("Test User");
+        request.setEmail("unique@example.com");
+        request.setPhone("9876543210");
+        request.setPassword("Password@123");
+
+        when(userRepository.existsByEmail("unique@example.com")).thenReturn(false);
+        when(userRepository.existsByPhone("9876543210")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("phone number already exists");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void register_shouldNormalizePhoneWithPrefix_andSave10Digits() {
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("User Prefix");
+        request.setEmail("prefix@example.com");
+        request.setPhone("+91 9876543210");
+        request.setPassword("Password@123");
+
+        when(userRepository.existsByEmail("prefix@example.com")).thenReturn(false);
+        when(userRepository.existsByPhone("9876543210")).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashed");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User u = invocation.getArgument(0);
+            u.setId(15L);
+            return u;
+        });
+        when(jwtTokenProvider.generateToken(anyLong(), anyString(), anyString())).thenReturn("prefix-token");
+
+        var response = authService.register(request);
+
+        assertThat(response.getUser().getPhone()).isEqualTo("9876543210");
+        verify(userRepository).save(argThat(user -> "9876543210".equals(user.getPhone())));
     }
 
     @Test
@@ -90,10 +190,12 @@ class AuthServiceImplTest {
         RegisterRequest request = new RegisterRequest();
         request.setFullName("Sneaky User");
         request.setEmail("sneaky@example.com");
+        request.setPhone("9876543211");
         request.setPassword("Password@123");
         request.setRole(Role.ADMIN);
 
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        when(userRepository.existsByPhone("9876543211")).thenReturn(false);
         when(passwordEncoder.encode(anyString())).thenReturn("hashed");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User u = invocation.getArgument(0);
@@ -112,9 +214,11 @@ class AuthServiceImplTest {
         RegisterRequest request = new RegisterRequest();
         request.setFullName("Dadi Jeevitesh");
         request.setEmail("dadi@example.com");
+        request.setPhone("9876543212");
         request.setPassword("dadi123");
 
         when(userRepository.existsByEmail("dadi@example.com")).thenReturn(false);
+        when(userRepository.existsByPhone("9876543212")).thenReturn(false);
         when(passwordEncoder.encode("dadi123")).thenReturn("hashed-dadi123");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User u = invocation.getArgument(0);
@@ -127,6 +231,7 @@ class AuthServiceImplTest {
 
         assertThat(response.getAccessToken()).isEqualTo("dadi-token");
         assertThat(response.getUser().getEmail()).isEqualTo("dadi@example.com");
+        assertThat(response.getUser().getPhone()).isEqualTo("9876543212");
         verify(passwordEncoder).encode("dadi123");
     }
 
@@ -135,10 +240,12 @@ class AuthServiceImplTest {
         RegisterRequest request = new RegisterRequest();
         request.setFullName("Suresh Reddy");
         request.setEmail("suresh.owner@example.com");
+        request.setPhone("9876543213");
         request.setPassword("pharmacy123");
         request.setRole(Role.PHARMACY_OWNER);
 
         when(userRepository.existsByEmail("suresh.owner@example.com")).thenReturn(false);
+        when(userRepository.existsByPhone("9876543213")).thenReturn(false);
         when(passwordEncoder.encode("pharmacy123")).thenReturn("hashed-pharmacy123");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User u = invocation.getArgument(0);
@@ -150,7 +257,7 @@ class AuthServiceImplTest {
         var response = authService.register(request);
 
         assertThat(response.getUser().getRole()).isEqualTo(Role.PHARMACY_OWNER.name());
+        assertThat(response.getUser().getPhone()).isEqualTo("9876543213");
         verify(pharmacyRepository).save(any(com.medifindai.entity.Pharmacy.class));
     }
 }
-

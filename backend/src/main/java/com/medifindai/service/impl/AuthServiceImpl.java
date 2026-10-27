@@ -54,15 +54,28 @@ public class AuthServiceImpl implements AuthService {
             throw new DuplicateResourceException("An account with this email already exists");
         }
 
+        if (request.getPhone() == null || request.getPhone().trim().isBlank()) {
+            throw new BadRequestException("Phone number is required");
+        }
+
+        String normalizedPhone = normalizePhoneNumber(request.getPhone());
+        if (!normalizedPhone.matches("^[0-9]{10}$")) {
+            throw new BadRequestException("Phone must be a valid 10-digit mobile number");
+        }
+
+        if (userRepository.existsByPhone(normalizedPhone)) {
+            throw new DuplicateResourceException("An account with this phone number already exists");
+        }
+
         // ADMIN role can never be self-assigned during public registration.
         Role role = (request.getRole() == null || request.getRole() == Role.ADMIN)
                 ? Role.USER
                 : request.getRole();
 
         User user = User.builder()
-                .fullName(request.getFullName())
-                .email(request.getEmail())
-                .phone(request.getPhone())
+                .fullName(request.getFullName().trim())
+                .email(request.getEmail().trim().toLowerCase())
+                .phone(normalizedPhone)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .role(role)
                 .active(true)
@@ -220,8 +233,24 @@ public class AuthServiceImpl implements AuthService {
                         .id(user.getId())
                         .fullName(user.getFullName())
                         .email(user.getEmail())
+                        .phone(user.getPhone())
                         .role(user.getRole().name())
                         .build())
                 .build();
+    }
+
+    private String normalizePhoneNumber(String phone) {
+        if (phone == null) {
+            return "";
+        }
+        String clean = phone.replaceAll("[\\s\\-()]", "");
+        if (clean.startsWith("+91")) {
+            clean = clean.substring(3);
+        } else if (clean.startsWith("91") && clean.length() == 12) {
+            clean = clean.substring(2);
+        } else if (clean.startsWith("0") && clean.length() == 11) {
+            clean = clean.substring(1);
+        }
+        return clean;
     }
 }
